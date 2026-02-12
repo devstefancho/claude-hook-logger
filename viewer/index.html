@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hook Events Log Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    background: #0d1117;
+    color: #c9d1d9;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 {
+    font-size: 16px;
+    color: #58a6ff;
+    white-space: nowrap;
+  }
+  .header select, .header button {
+    font-family: inherit;
+    font-size: 12px;
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  .header select:hover, .header button:hover { border-color: #58a6ff; }
+  .header button.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .header .spacer { flex: 1; }
+
+  /* Summary Cards */
+  .summary {
+    display: flex;
+    gap: 12px;
+    padding: 16px 20px;
+    flex-wrap: wrap;
+  }
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 14px 18px;
+    flex: 1;
+    min-width: 120px;
+  }
+  .card .label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+  .card .value { font-size: 28px; font-weight: 700; margin-top: 4px; color: #f0f6fc; }
+  .card.interrupts .value { color: #ff4444; }
+  .card.orphans .value { color: #ffbb33; }
+
+  /* Main Layout */
+  .main {
+    display: flex;
+    gap: 16px;
+    padding: 0 20px 20px;
+    min-height: calc(100vh - 180px);
+  }
+  .left { width: 40%; display: flex; flex-direction: column; gap: 16px; }
+  .right { width: 60%; display: flex; flex-direction: column; }
+
+  /* Panels */
+  .panel {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .panel-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #30363d;
+    background: #0d1117;
+  }
+  .panel-body {
+    padding: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .panel-body.tall { max-height: calc(100vh - 240px); }
+
+  /* Scrollbar */
+  .panel-body::-webkit-scrollbar { width: 6px; }
+  .panel-body::-webkit-scrollbar-track { background: transparent; }
+  .panel-body::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  .panel-body::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+  /* Session Cards */
+  .session-card {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .session-card:hover { border-color: #58a6ff; }
+  .session-card.selected { border-color: #58a6ff; background: #161b22; }
+  .session-card.has-interrupt { border-left: 3px solid #ff4444; }
+  .session-card.has-orphan { border-left: 3px solid #ffbb33; }
+  .session-card.has-interrupt.has-orphan { border-left: 3px solid #ff4444; border-right: 3px solid #ffbb33; }
+  .session-card.is-live { border-left: 3px solid #238636; }
+  .live-badge {
+    display: inline-block;
+    background: #238636;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    text-transform: uppercase;
+    vertical-align: middle;
+  }
+  .session-card .sid { font-size: 13px; font-weight: 600; color: #58a6ff; }
+  .session-card .cwd { font-size: 11px; color: #8b949e; margin-top: 2px; word-break: break-all; }
+  .session-card .stats {
+    display: flex;
+    gap: 12px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: #8b949e;
+  }
+  .session-card .stats span { display: flex; align-items: center; gap: 3px; }
+  .session-card .stats .warn { color: #ff4444; }
+  .session-card .stats .caution { color: #ffbb33; }
+
+  /* Tool Bar Chart */
+  .tool-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .tool-row .name { width: 120px; text-align: right; color: #8b949e; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tool-row .bar-bg { flex: 1; height: 18px; background: #21262d; border-radius: 3px; overflow: hidden; }
+  .tool-row .bar { height: 100%; background: #238636; border-radius: 3px; transition: width 0.3s; display: flex; align-items: center; padding-left: 6px; font-size: 10px; color: #fff; min-width: 24px; }
+
+  /* Event Timeline */
+  .timeline-filters {
+    display: flex;
+    gap: 6px;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #30363d;
+    align-items: center;
+  }
+  .filter-btn {
+    font-family: inherit;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #30363d;
+    background: #21262d;
+    color: #8b949e;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn.active { border-color: #58a6ff; color: #c9d1d9; background: #1f6feb33; }
+  .filter-btn:hover { border-color: #58a6ff; }
+  .filter-btn.reset-btn {
+    border-color: #da3633;
+    color: #f85149;
+  }
+  .filter-btn.reset-btn:hover { background: #da363322; }
+  .filter-only-btn {
+    font-family: inherit;
+    font-size: 9px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px solid #30363d;
+    background: transparent;
+    color: #484f58;
+    cursor: pointer;
+    margin-left: -2px;
+  }
+  .filter-only-btn:hover { color: #c9d1d9; border-color: #58a6ff; }
+  .search-input {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid #30363d;
+    background: #0d1117;
+    color: #c9d1d9;
+    width: 160px;
+    margin-left: auto;
+  }
+  .search-input::placeholder { color: #484f58; }
+
+  /* Event Row */
+  .event-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #21262d;
+    font-size: 12px;
+    transition: background 0.15s;
+  }
+  .event-row:hover { background: #1c2128; }
+  .event-row.orphan { border: 1px dashed #ffbb33; border-radius: 4px; margin: 2px 0; }
+  .event-row.highlight { background: #1f6feb22; }
+  .event-row .time { color: #484f58; width: 80px; flex-shrink: 0; font-size: 11px; }
+  .event-row .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    width: 60px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .event-row .extra-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .badge-orphan { background: #ffbb3333; color: #ffbb33; }
+  .badge-interrupt { background: #ff444433; color: #ff4444; }
+  .event-row .detail { color: #8b949e; flex: 1; word-break: break-all; }
+  .event-row .detail .tool { color: #c9d1d9; font-weight: 500; }
+  .event-row .session-tag {
+    font-size: 10px;
+    color: #484f58;
+    flex-shrink: 0;
+    width: 60px;
+    text-align: right;
+  }
+
+  /* Badge Colors */
+  .badge-pre { background: #00d4ff22; color: #00d4ff; }
+  .badge-post { background: #00ff8822; color: #00ff88; }
+  .badge-fail { background: #ff444422; color: #ff4444; }
+  .badge-prompt { background: #ffbb3322; color: #ffbb33; }
+  .badge-notif { background: #ff884422; color: #ff8844; }
+  .badge-stop { background: #aaaaaa22; color: #aaaaaa; }
+  .badge-sess-start { background: #ffffff22; color: #ffffff; }
+  .badge-sess-end { background: #88888822; color: #888888; }
+  .badge-sub-start { background: #bb66ff22; color: #bb66ff; }
+  .badge-sub-stop { background: #8844cc22; color: #8844cc; }
+
+  /* Interrupt / Orphan List */
+  .issue-item {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .issue-item:hover { border-color: #58a6ff; }
+  .issue-item.interrupt-item { border-left: 3px solid #ff4444; }
+  .issue-item.orphan-item { border-left: 3px solid #ffbb33; }
+  .issue-item .issue-label { font-size: 10px; text-transform: uppercase; font-weight: 600; }
+  .issue-item .issue-label.red { color: #ff4444; }
+  .issue-item .issue-label.yellow { color: #ffbb33; }
+  .issue-item .issue-detail { color: #8b949e; margin-top: 2px; }
+
+  .empty-state { color: #484f58; text-align: center; padding: 30px; font-size: 13px; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .main { flex-direction: column; }
+    .left, .right { width: 100%; }
+    .panel-body.tall { max-height: 500px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Hook Events Log Viewer</h1>
+  <select id="fileSelect"></select>
+  <div class="spacer"></div>
+  <button id="refreshBtn" onclick="loadData()">Refresh</button>
+  <button id="autoRefreshBtn" onclick="toggleAutoRefresh()">Auto-refresh: OFF</button>
+</div>
+
+<div class="summary" id="summaryCards"></div>
+
+<div class="main">
+  <div class="left">
+    <div class="panel">
+      <div class="panel-title">Sessions</div>
+      <div class="panel-body" id="sessionList"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Tool Usage</div>
+      <div class="panel-body" id="toolUsage"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Interrupt & Orphan Analysis</div>
+      <div class="panel-body" id="issueList"></div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="panel" style="flex:1; display:flex; flex-direction:column;">
+      <div class="panel-title">Event Timeline</div>
+      <div class="timeline-filters" id="timelineFilters"></div>
+      <div class="panel-body tall" id="eventTimeline"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const EVENT_TYPES = {
+  PreToolUse:         { badge: 'Pre',      cls: 'badge-pre' },
+  PostToolUse:        { badge: 'Post',     cls: 'badge-post' },
+  PostToolUseFailure: { badge: 'Fail',     cls: 'badge-fail' },
+  UserPromptSubmit:   { badge: 'Prompt',   cls: 'badge-prompt' },
+  Notification:       { badge: 'Notif',    cls: 'badge-notif' },
+  Stop:               { badge: 'Stop',     cls: 'badge-stop' },
+  SessionStart:       { badge: 'SessStart',cls: 'badge-sess-start' },
+  SessionEnd:         { badge: 'SessEnd',  cls: 'badge-sess-end' },
+  SubagentStart:      { badge: 'SubStart', cls: 'badge-sub-start' },
+  SubagentStop:       { badge: 'SubStop',  cls: 'badge-sub-stop' },
+};
+
+let allEvents = [];
+let summary = {};
+let selectedSession = null;
+let activeFilters = new Set(Object.keys(EVENT_TYPES));
+let searchText = '';
+let autoRefreshId = null;
+let lastEventCount = 0;
+
+// -- Data Loading --
+async function loadFiles() {
+  const res = await fetch('/api/files');
+  const { files } = await res.json();
+  const sel = document.getElementById('fileSelect');
+  sel.innerHTML = files.map(f => `<option value="${f}">${f}</option>`).join('');
+  sel.onchange = () => { selectedSession = null; loadData(); };
+}
+
+async function loadData() {
+  const file = document.getElementById('fileSelect').value || 'hook-events.jsonl';
+  const [evRes, sumRes] = await Promise.all([
+    fetch(`/api/events?file=${encodeURIComponent(file)}`),
+    fetch(`/api/summary?file=${encodeURIComponent(file)}`),
+  ]);
+  const evData = await evRes.json();
+  const sumData = await sumRes.json();
+  allEvents = evData.events || [];
+  summary = sumData;
+  lastEventCount = allEvents.length;
+  render();
+}
+
+async function checkForUpdates() {
+  const file = document.getElementById('fileSelect').value || 'hook-events.jsonl';
+  const res = await fetch(`/api/summary?file=${encodeURIComponent(file)}`);
+  const data = await res.json();
+  if (data.totalEvents !== lastEventCount) {
+    loadData();
+  }
+}
+
+function toggleAutoRefresh() {
+  const btn = document.getElementById('autoRefreshBtn');
+  if (autoRefreshId) {
+    clearInterval(autoRefreshId);
+    autoRefreshId = null;
+    btn.textContent = 'Auto-refresh: OFF';
+    btn.classList.remove('active');
+  } else {
+    autoRefreshId = setInterval(checkForUpdates, 5000);
+    btn.textContent = 'Auto-refresh: ON';
+    btn.classList.add('active');
+  }
+}
+
+// -- Rendering --
+function render() {
+  renderSummary();
+  renderSessions();
+  renderToolUsage();
+  renderIssues();
+  renderFilters();
+  renderTimeline();
+}
+
+function renderSummary() {
+  const s = summary;
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="card"><div class="label">Total Events</div><div class="value">${s.totalEvents || 0}</div></div>
+    <div class="card"><div class="label">Sessions</div><div class="value">${s.liveSessionCount ? `<span style="color:#3fb950">${s.liveSessionCount}</span> / ` : ''}${s.sessionCount || 0}</div></div>
+    <div class="card"><div class="label">Tool Types</div><div class="value">${s.toolCount || 0}</div></div>
+    <div class="card interrupts"><div class="label">Interrupts</div><div class="value">${s.interruptCount || 0}</div></div>
+    <div class="card orphans"><div class="label">Orphans</div><div class="value">${s.orphanCount || 0}</div></div>
+  `;
+}
+
+function renderSessions() {
+  const el = document.getElementById('sessionList');
+  const sessions = summary.sessions || [];
+  if (!sessions.length) { el.innerHTML = '<div class="empty-state">No sessions found</div>'; return; }
+  el.innerHTML = sessions.map(s => {
+    const shortId = s.id.slice(0, 8);
+    const cwdShort = s.cwd.replace(/^\/Users\/[^/]+/, '~');
+    const cls = [
+      'session-card',
+      selectedSession === s.id ? 'selected' : '',
+      s.hasInterrupt ? 'has-interrupt' : '',
+      s.orphanCount > 0 ? 'has-orphan' : '',
+      s.isLive ? 'is-live' : '',
+    ].filter(Boolean).join(' ');
+    return `
+      <div class="${cls}" onclick="selectSession('${s.id}')">
+        <div class="sid">${shortId}${s.isLive ? '<span class="live-badge">LIVE</span>' : ''}</div>
+        <div class="cwd">${esc(s.cwd)}</div>
+        <div class="stats">
+          <span>${s.eventCount} events</span>
+          ${s.hasInterrupt ? '<span class="warn">&#9889; interrupt</span>' : ''}
+          ${s.orphanCount > 0 ? `<span class="caution">&#9888; ${s.orphanCount} orphan</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderToolUsage() {
+  const el = document.getElementById('toolUsage');
+  const tools = summary.toolUsage || [];
+  if (!tools.length) { el.innerHTML = '<div class="empty-state">No tool usage data</div>'; return; }
+  const max = tools[0].count;
+  el.innerHTML = tools.map(t => `
+    <div class="tool-row">
+      <div class="name" title="${esc(t.name)}">${esc(t.name)}</div>
+      <div class="bar-bg"><div class="bar" style="width:${(t.count / max * 100).toFixed(1)}%">${t.count}</div></div>
+    </div>
+  `).join('');
+}
+
+function renderIssues() {
+  const el = document.getElementById('issueList');
+  const orphanIds = new Set(summary.orphanIds || []);
+  const interrupts = allEvents.filter(e => e.event === 'Stop' && e.data?.stop_hook_active);
+  const orphans = allEvents.filter(e => e.event === 'PreToolUse' && e.data?.tool_use_id && orphanIds.has(e.data.tool_use_id));
+
+  if (!interrupts.length && !orphans.length) {
+    el.innerHTML = '<div class="empty-state">No interrupts or orphans detected</div>';
+    return;
+  }
+
+  let html = '';
+  for (const ev of interrupts) {
+    const idx = allEvents.indexOf(ev);
+    html += `
+      <div class="issue-item interrupt-item" onclick="scrollToEvent(${idx})">
+        <div class="issue-label red">&#9889; Interrupt</div>
+        <div class="issue-detail">${formatTime(ev.ts)} &middot; session ${ev.session_id?.slice(0, 8)}</div>
+      </div>
+    `;
+  }
+  for (const ev of orphans) {
+    const idx = allEvents.indexOf(ev);
+    html += `
+      <div class="issue-item orphan-item" onclick="scrollToEvent(${idx})">
+        <div class="issue-label yellow">&#9888; Orphan Tool Call</div>
+        <div class="issue-detail">${esc(ev.data.tool_name)} &middot; ${formatTime(ev.ts)} &middot; session ${ev.session_id?.slice(0, 8)}</div>
+      </div>
+    `;
+  }
+  el.innerHTML = html;
+}
+
+function renderFilters() {
+  const el = document.getElementById('timelineFilters');
+  const presentTypes = new Set(allEvents.map(e => e.event));
+  let html = '<button class="filter-btn reset-btn" onclick="resetFilters()">Reset</button>';
+  for (const [type, info] of Object.entries(EVENT_TYPES)) {
+    if (!presentTypes.has(type)) continue;
+    const active = activeFilters.has(type) ? 'active' : '';
+    html += `<button class="filter-btn ${active}" onclick="toggleFilter('${type}')">${info.badge}</button>`;
+    html += `<button class="filter-only-btn" onclick="filterOnly('${type}')">Only</button>`;
+  }
+  html += `<input class="search-input" type="text" placeholder="Search..." value="${esc(searchText)}" oninput="onSearch(this.value)">`;
+  el.innerHTML = html;
+}
+
+function renderTimeline() {
+  const el = document.getElementById('eventTimeline');
+  const orphanIds = new Set(summary.orphanIds || []);
+  const filtered = allEvents.filter((ev, i) => {
+    if (!activeFilters.has(ev.event)) return false;
+    if (selectedSession && ev.session_id !== selectedSession) return false;
+    if (searchText) {
+      const haystack = JSON.stringify(ev).toLowerCase();
+      if (!haystack.includes(searchText.toLowerCase())) return false;
+    }
+    return true;
+  }).reverse();
+
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty-state">No events match current filters</div>';
+    return;
+  }
+
+  el.innerHTML = filtered.map(ev => {
+    const idx = allEvents.indexOf(ev);
+    const info = EVENT_TYPES[ev.event] || { badge: ev.event, cls: 'badge-stop' };
+    const isOrphan = ev.event === 'PreToolUse' && ev.data?.tool_use_id && orphanIds.has(ev.data.tool_use_id);
+    const isInterrupt = ev.event === 'Stop' && ev.data?.stop_hook_active;
+    const rowCls = ['event-row', isOrphan ? 'orphan' : ''].filter(Boolean).join(' ');
+    const toolName = ev.data?.tool_name || '';
+    const detail = buildDetail(ev);
+    const shortSid = (ev.session_id || '').slice(0, 6);
+
+    let extraBadges = '';
+    if (isOrphan) extraBadges += '<span class="extra-badge badge-orphan">ORPHAN</span> ';
+    if (isInterrupt) extraBadges += '<span class="extra-badge badge-interrupt">&#9889; INTERRUPT</span> ';
+
+    return `
+      <div class="${rowCls}" id="ev-${idx}">
+        <span class="time">${formatTime(ev.ts)}</span>
+        <span class="badge ${info.cls}">${info.badge}</span>
+        ${extraBadges}
+        <span class="detail">${detail}</span>
+        <span class="session-tag">${shortSid}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function buildDetail(ev) {
+  const d = ev.data || {};
+  switch (ev.event) {
+    case 'PreToolUse':
+      return `<span class="tool">${esc(d.tool_name || '')}</span> ${esc(truncate(d.tool_input_summary || '', 120))}`;
+    case 'PostToolUse':
+      return `<span class="tool">${esc(d.tool_name || '')}</span> ${d.success ? '&#10004;' : '&#10008;'}`;
+    case 'PostToolUseFailure':
+      return `<span class="tool">${esc(d.tool_name || '')}</span> &#10008; ${esc(truncate(d.error || '', 100))}`;
+    case 'UserPromptSubmit':
+      return esc(truncate(d.prompt || d.message || JSON.stringify(d), 150));
+    case 'Stop':
+      return d.stop_hook_active ? '&#9889; Session interrupted (stop hook)' : esc(truncate(JSON.stringify(d), 120));
+    case 'Notification':
+      return esc(truncate(d.message || JSON.stringify(d), 150));
+    default:
+      return esc(truncate(JSON.stringify(d), 150));
+  }
+}
+
+// -- Interactions --
+function selectSession(sid) {
+  selectedSession = selectedSession === sid ? null : sid;
+  renderSessions();
+  renderTimeline();
+}
+
+function toggleFilter(type) {
+  if (activeFilters.has(type)) activeFilters.delete(type);
+  else activeFilters.add(type);
+  renderFilters();
+  renderTimeline();
+}
+
+function filterOnly(type) {
+  activeFilters.clear();
+  activeFilters.add(type);
+  renderFilters();
+  renderTimeline();
+}
+
+function resetFilters() {
+  activeFilters = new Set(Object.keys(EVENT_TYPES));
+  selectedSession = null;
+  searchText = '';
+  render();
+}
+
+function onSearch(val) {
+  searchText = val;
+  renderTimeline();
+}
+
+function scrollToEvent(idx) {
+  const el = document.getElementById(`ev-${idx}`);
+  if (!el) {
+    // Event may be filtered out, clear filters first
+    selectedSession = null;
+    activeFilters = new Set(Object.keys(EVENT_TYPES));
+    searchText = '';
+    renderFilters();
+    renderSessions();
+    renderTimeline();
+    requestAnimationFrame(() => {
+      const el2 = document.getElementById(`ev-${idx}`);
+      if (el2) {
+        el2.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el2.classList.add('highlight');
+        setTimeout(() => el2.classList.remove('highlight'), 2000);
+      }
+    });
+    return;
+  }
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('highlight');
+  setTimeout(() => el.classList.remove('highlight'), 2000);
+}
+
+// -- Utilities --
+function formatTime(ts) {
+  if (!ts) return '--:--:--';
+  const d = new Date(ts);
+  return d.toLocaleTimeString('en-US', { hour12: false });
+}
+
+function truncate(s, max) {
+  return s.length > max ? s.slice(0, max) + '...' : s;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// -- Init --
+loadFiles().then(loadData);
+</script>
+</body>
+</html>
