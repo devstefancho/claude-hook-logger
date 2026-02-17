@@ -10,20 +10,19 @@
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
     background: #0d1117;
     color: #c9d1d9;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
   }
 
   /* Header */
   .header {
     background: #161b22;
     border-bottom: 1px solid #30363d;
-    padding: 12px 20px;
+    padding: 10px 20px;
     display: flex;
     align-items: center;
     gap: 16px;
     flex-wrap: wrap;
-    position: sticky;
-    top: 0;
     z-index: 100;
   }
   .header h1 {
@@ -45,35 +44,47 @@
   .header button.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
   .header .spacer { flex: 1; }
 
-  /* Summary Cards */
-  .summary {
+  /* Stat Bar (replaces Summary Cards) */
+  .stat-bar {
     display: flex;
-    gap: 12px;
-    padding: 16px 20px;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 20px;
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    font-size: 13px;
     flex-wrap: wrap;
   }
-  .card {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 8px;
-    padding: 14px 18px;
-    flex: 1;
-    min-width: 120px;
+  .stat-bar .stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #8b949e;
   }
-  .card .label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
-  .card .value { font-size: 28px; font-weight: 700; margin-top: 4px; color: #f0f6fc; }
-  .card.interrupts .value { color: #ff4444; }
-  .card.orphans .value { color: #ffbb33; }
+  .stat-bar .stat .val { color: #f0f6fc; font-weight: 600; }
+  .stat-bar .stat .val.live { color: #3fb950; }
+  .stat-bar .stat .val.stale { color: #d29922; }
+  .stat-bar .stat .val.warn { color: #ff4444; }
+  .stat-bar .stat .val.caution { color: #ffbb33; }
+  .stat-bar .info-icon {
+    cursor: help;
+    color: #484f58;
+    font-size: 12px;
+    margin-left: 1px;
+  }
+  .stat-bar .info-icon:hover { color: #8b949e; }
+  .stat-bar .separator { color: #30363d; }
 
   /* Main Layout */
   .main {
     display: flex;
     gap: 16px;
-    padding: 0 20px 20px;
-    min-height: calc(100vh - 180px);
+    padding: 12px 20px;
+    height: calc(100vh - 90px);
+    overflow: hidden;
   }
-  .left { width: 40%; display: flex; flex-direction: column; gap: 16px; }
-  .right { width: 60%; display: flex; flex-direction: column; }
+  .left { width: 40%; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+  .right { width: 60%; display: flex; flex-direction: column; overflow: hidden; }
 
   /* Panels */
   .panel {
@@ -81,6 +92,8 @@
     border: 1px solid #30363d;
     border-radius: 8px;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .panel-title {
     font-size: 12px;
@@ -88,30 +101,30 @@
     color: #8b949e;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    padding: 12px 14px;
+    padding: 8px 14px;
     border-bottom: 1px solid #30363d;
     background: #0d1117;
+    flex-shrink: 0;
   }
   .panel-body {
-    padding: 10px;
-    max-height: 400px;
+    padding: 6px;
     overflow-y: auto;
+    flex: 1;
   }
-  .panel-body.tall { max-height: calc(100vh - 240px); }
 
   /* Scrollbar */
-  .panel-body::-webkit-scrollbar { width: 6px; }
-  .panel-body::-webkit-scrollbar-track { background: transparent; }
-  .panel-body::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
-  .panel-body::-webkit-scrollbar-thumb:hover { background: #484f58; }
+  .panel-body::-webkit-scrollbar, .tab-content::-webkit-scrollbar { width: 6px; }
+  .panel-body::-webkit-scrollbar-track, .tab-content::-webkit-scrollbar-track { background: transparent; }
+  .panel-body::-webkit-scrollbar-thumb, .tab-content::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+  .panel-body::-webkit-scrollbar-thumb:hover, .tab-content::-webkit-scrollbar-thumb:hover { background: #484f58; }
 
-  /* Session Cards */
+  /* Session Cards (compact) */
   .session-card {
     background: #0d1117;
     border: 1px solid #30363d;
     border-radius: 6px;
-    padding: 10px 12px;
-    margin-bottom: 8px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
     cursor: pointer;
     transition: border-color 0.15s;
   }
@@ -121,6 +134,7 @@
   .session-card.has-orphan { border-left: 3px solid #ffbb33; }
   .session-card.has-interrupt.has-orphan { border-left: 3px solid #ff4444; border-right: 3px solid #ffbb33; }
   .session-card.is-live { border-left: 3px solid #238636; }
+  .session-card.is-stale { border-left: 3px solid #d29922; }
   .live-badge {
     display: inline-block;
     background: #238636;
@@ -133,39 +147,112 @@
     text-transform: uppercase;
     vertical-align: middle;
   }
-  .session-card .sid { font-size: 13px; font-weight: 600; color: #58a6ff; }
-  .session-card .cwd { font-size: 11px; color: #8b949e; margin-top: 2px; word-break: break-all; }
+  .stale-badge {
+    display: inline-block;
+    background: #d29922;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    text-transform: uppercase;
+    vertical-align: middle;
+  }
+  .session-card .sid { font-size: 12px; font-weight: 600; color: #58a6ff; }
+  .session-card .cwd { font-size: 10px; color: #8b949e; margin-top: 1px; word-break: break-all; }
   .session-card .stats {
     display: flex;
-    gap: 12px;
-    margin-top: 6px;
-    font-size: 11px;
+    gap: 10px;
+    margin-top: 3px;
+    font-size: 10px;
     color: #8b949e;
   }
   .session-card .stats span { display: flex; align-items: center; gap: 3px; }
   .session-card .stats .warn { color: #ff4444; }
   .session-card .stats .caution { color: #ffbb33; }
+  .session-card .stats .ago { color: #484f58; margin-left: auto; }
 
-  /* Tool Bar Chart */
+  /* Tab Bar */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    background: #0d1117;
+    border-bottom: 1px solid #30363d;
+    flex-shrink: 0;
+  }
+  .tab-btn {
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border: none;
+    background: transparent;
+    color: #8b949e;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { color: #c9d1d9; }
+  .tab-btn.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+  .tab-content {
+    padding: 6px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  /* Tool Bar Chart (inline bar layout) */
   .tool-row {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
+    padding: 0 8px;
+    margin-bottom: 3px;
+    background: #21262d;
+    border-radius: 3px;
     font-size: 12px;
+    height: 22px;
+    overflow: hidden;
   }
-  .tool-row .name { width: 120px; text-align: right; color: #8b949e; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tool-row .bar-bg { flex: 1; height: 18px; background: #21262d; border-radius: 3px; overflow: hidden; }
-  .tool-row .bar { height: 100%; background: #238636; border-radius: 3px; transition: width 0.3s; display: flex; align-items: center; padding-left: 6px; font-size: 10px; color: #fff; min-width: 24px; }
+  .tool-row .bar-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    border-radius: 3px;
+    transition: width 0.3s;
+    z-index: 0;
+  }
+  .tool-row .bar-fill.green { background: #238636; }
+  .tool-row .bar-fill.purple { background: #bb66ff; }
+  .tool-row .name {
+    position: relative;
+    z-index: 1;
+    color: #c9d1d9;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+  .tool-row .count {
+    position: relative;
+    z-index: 1;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
 
   /* Event Timeline */
   .timeline-filters {
     display: flex;
     gap: 6px;
-    padding: 10px 14px;
+    padding: 8px 14px;
     flex-wrap: wrap;
     border-bottom: 1px solid #30363d;
     align-items: center;
+    flex-shrink: 0;
   }
   .filter-btn {
     font-family: inherit;
@@ -185,6 +272,12 @@
     color: #f85149;
   }
   .filter-btn.reset-btn:hover { background: #da363322; }
+  .filter-btn.issues-btn {
+    border-color: #d29922;
+    color: #d29922;
+  }
+  .filter-btn.issues-btn:hover { background: #d2992222; }
+  .filter-btn.issues-btn.active { background: #d2992233; border-color: #d29922; color: #d29922; }
   .filter-only-btn {
     font-family: inherit;
     font-size: 9px;
@@ -223,7 +316,13 @@
   .event-row:hover { background: #1c2128; }
   .event-row.orphan { border: 1px dashed #ffbb33; border-radius: 4px; margin: 2px 0; }
   .event-row.highlight { background: #1f6feb22; }
-  .event-row .time { color: #484f58; width: 80px; flex-shrink: 0; font-size: 11px; }
+  .event-row .time {
+    color: #484f58;
+    width: 44px;
+    flex-shrink: 0;
+    font-size: 11px;
+    cursor: default;
+  }
   .event-row .badge {
     display: inline-block;
     padding: 1px 6px;
@@ -254,6 +353,14 @@
     flex-shrink: 0;
     width: 60px;
     text-align: right;
+  }
+  .event-row .session-tag.clickable {
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .event-row .session-tag.clickable:hover {
+    color: #58a6ff;
+    text-decoration: underline;
   }
 
   /* Badge Colors */
@@ -287,13 +394,36 @@
   .issue-item .issue-label.yellow { color: #ffbb33; }
   .issue-item .issue-detail { color: #8b949e; margin-top: 2px; }
 
-  .empty-state { color: #484f58; text-align: center; padding: 30px; font-size: 13px; }
+  .issues-hint {
+    font-size: 11px;
+    color: #484f58;
+    padding: 8px 10px;
+    border-bottom: 1px solid #21262d;
+    line-height: 1.5;
+  }
+
+  .empty-state { color: #484f58; text-align: center; padding: 20px; font-size: 13px; }
+
+  .filter-hint {
+    font-size: 11px;
+    color: #58a6ff;
+    padding: 4px 14px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .filter-hint .clear-filter {
+    cursor: pointer;
+    color: #f85149;
+    font-size: 10px;
+  }
+  .filter-hint .clear-filter:hover { text-decoration: underline; }
 
   /* Responsive */
   @media (max-width: 900px) {
-    .main { flex-direction: column; }
+    .main { flex-direction: column; height: auto; }
     .left, .right { width: 100%; }
-    .panel-body.tall { max-height: 500px; }
+    body { overflow: auto; height: auto; }
   }
 </style>
 </head>
@@ -307,32 +437,29 @@
   <button id="autoRefreshBtn" onclick="toggleAutoRefresh()">Auto-refresh: OFF</button>
 </div>
 
-<div class="summary" id="summaryCards"></div>
+<div class="stat-bar" id="statBar"></div>
 
 <div class="main">
   <div class="left">
-    <div class="panel">
-      <div class="panel-title">Sessions</div>
+    <div class="panel" style="max-height: 200px; flex-shrink: 0;">
+      <div class="panel-title" id="sessionsTitle">Sessions</div>
       <div class="panel-body" id="sessionList"></div>
     </div>
-    <div class="panel">
-      <div class="panel-title">Tool Usage</div>
-      <div class="panel-body" id="toolUsage"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-title">Skill Usage</div>
-      <div class="panel-body" id="skillUsage"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-title">Interrupt & Orphan Analysis</div>
-      <div class="panel-body" id="issueList"></div>
+    <div class="panel" style="flex: 1; min-height: 0;">
+      <div class="tab-bar" id="leftTabBar">
+        <button class="tab-btn active" onclick="switchLeftTab('tools')">Tools</button>
+        <button class="tab-btn" onclick="switchLeftTab('skills')">Skills</button>
+        <button class="tab-btn" onclick="switchLeftTab('issues')">Issues</button>
+      </div>
+      <div class="tab-content" id="leftTabContent"></div>
     </div>
   </div>
   <div class="right">
-    <div class="panel" style="flex:1; display:flex; flex-direction:column;">
+    <div class="panel" style="flex:1; display:flex; flex-direction:column; min-height: 0;">
       <div class="panel-title">Event Timeline</div>
       <div class="timeline-filters" id="timelineFilters"></div>
-      <div class="panel-body tall" id="eventTimeline"></div>
+      <div id="filterHint"></div>
+      <div class="panel-body" id="eventTimeline" style="flex:1;"></div>
     </div>
   </div>
 </div>
@@ -358,6 +485,7 @@ let activeFilters = new Set(Object.keys(EVENT_TYPES));
 let searchText = '';
 let autoRefreshId = null;
 let lastEventCount = 0;
+let activeLeftTab = 'tools';
 
 // -- Data Loading --
 async function loadFiles() {
@@ -407,82 +535,145 @@ function toggleAutoRefresh() {
 
 // -- Rendering --
 function render() {
-  renderSummary();
+  renderStatBar();
   renderSessions();
-  renderToolUsage();
-  renderSkillUsage();
-  renderIssues();
+  renderLeftTabContent();
   renderFilters();
+  renderFilterHint();
   renderTimeline();
 }
 
-function renderSummary() {
+function renderStatBar() {
   const s = summary;
-  document.getElementById('summaryCards').innerHTML = `
-    <div class="card"><div class="label">Total Events</div><div class="value">${s.totalEvents || 0}</div></div>
-    <div class="card"><div class="label">Sessions</div><div class="value">${s.liveSessionCount ? `<span style="color:#3fb950">${s.liveSessionCount}</span> / ` : ''}${s.sessionCount || 0}</div></div>
-    <div class="card"><div class="label">Tool Types</div><div class="value">${s.toolCount || 0}</div></div>
-    <div class="card interrupts"><div class="label">Interrupts</div><div class="value">${s.interruptCount || 0}</div></div>
-    <div class="card orphans"><div class="label">Orphans</div><div class="value">${s.orphanCount || 0}</div></div>
+  const liveCount = s.liveSessionCount || 0;
+  const staleCount = s.staleSessionCount || 0;
+  const totalSessions = s.sessionCount || 0;
+  const interrupts = s.interruptCount || 0;
+  const orphans = s.orphanCount || 0;
+
+  let sessionText = '';
+  if (liveCount > 0) sessionText += `<span class="val live">${liveCount} live</span>`;
+  if (staleCount > 0) sessionText += `${liveCount ? ' / ' : ''}<span class="val stale">${staleCount} stale</span>`;
+  sessionText += `${(liveCount || staleCount) ? ' / ' : ''}<span class="val">${totalSessions}</span> total`;
+
+  document.getElementById('statBar').innerHTML = `
+    <div class="stat"><span class="val">${s.totalEvents || 0}</span> events</div>
+    <span class="separator">|</span>
+    <div class="stat">Sessions: ${sessionText}</div>
+    <span class="separator">|</span>
+    <div class="stat"><span class="val">${s.toolCount || 0}</span> tools</div>
+    <span class="separator">|</span>
+    <div class="stat"><span class="val${interrupts ? ' warn' : ''}">${interrupts}</span> interrupts <span class="info-icon" title="Sessions terminated by the stop hook while still active">&#9432;</span></div>
+    <span class="separator">|</span>
+    <div class="stat"><span class="val${orphans ? ' caution' : ''}">${orphans}</span> orphans <span class="info-icon" title="PreToolUse events that never received a matching PostToolUse response">&#9432;</span></div>
   `;
 }
 
 function renderSessions() {
   const el = document.getElementById('sessionList');
-  const sessions = summary.sessions || [];
+  const sessions = sortSessions(summary.sessions || []);
+  const titleEl = document.getElementById('sessionsTitle');
+
+  if (selectedSession) {
+    const shortSid = selectedSession.slice(0, 8);
+    titleEl.innerHTML = `Sessions <span style="color:#58a6ff;font-size:10px;font-weight:400">(filtered: ${shortSid}) <span style="cursor:pointer;color:#f85149" onclick="clearSessionFilter()">&#10005;</span></span>`;
+  } else {
+    titleEl.textContent = 'Sessions';
+  }
+
   if (!sessions.length) { el.innerHTML = '<div class="empty-state">No sessions found</div>'; return; }
   el.innerHTML = sessions.map(s => {
     const shortId = s.id.slice(0, 8);
-    const cwdShort = s.cwd.replace(/^\/Users\/[^/]+/, '~');
     const cls = [
       'session-card',
       selectedSession === s.id ? 'selected' : '',
       s.hasInterrupt ? 'has-interrupt' : '',
       s.orphanCount > 0 ? 'has-orphan' : '',
       s.isLive ? 'is-live' : '',
+      s.isStale ? 'is-stale' : '',
     ].filter(Boolean).join(' ');
+
+    let badge = '';
+    if (s.isLive) badge = '<span class="live-badge" title="Active within last 5 min">LIVE</span>';
+    else if (s.isStale) badge = '<span class="stale-badge" title="No activity for 5+ min">STALE</span>';
+
     return `
-      <div class="${cls}" onclick="selectSession('${s.id}')">
-        <div class="sid">${shortId}${s.isLive ? '<span class="live-badge">LIVE</span>' : ''}</div>
+      <div class="${cls}" onclick="selectSession('${s.id}')" id="sess-${s.id.slice(0,8)}">
+        <div class="sid">${shortId}${badge}</div>
         <div class="cwd">${esc(s.cwd)}</div>
         <div class="stats">
           <span>${s.eventCount} events</span>
           ${s.hasInterrupt ? '<span class="warn">&#9889; interrupt</span>' : ''}
           ${s.orphanCount > 0 ? `<span class="caution">&#9888; ${s.orphanCount} orphan</span>` : ''}
+          <span class="ago">${formatRelativeTime(s.lastTs)} ago</span>
         </div>
       </div>
     `;
   }).join('');
 }
 
-function renderToolUsage() {
-  const el = document.getElementById('toolUsage');
+function sortSessions(sessions) {
+  return [...sessions].sort((a, b) => {
+    // live first
+    if (a.isLive && !b.isLive) return -1;
+    if (!a.isLive && b.isLive) return 1;
+    // stale next (with issues first among stale)
+    if (a.isStale && !b.isStale) return -1;
+    if (!a.isStale && b.isStale) return 1;
+    if (a.isStale && b.isStale) {
+      const aIssues = (a.hasInterrupt ? 1 : 0) + a.orphanCount;
+      const bIssues = (b.hasInterrupt ? 1 : 0) + b.orphanCount;
+      if (aIssues !== bIssues) return bIssues - aIssues;
+    }
+    // then by lastTs desc
+    return b.lastTs > a.lastTs ? 1 : -1;
+  });
+}
+
+function switchLeftTab(tab) {
+  activeLeftTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.toLowerCase() === tab);
+  });
+  renderLeftTabContent();
+}
+
+function renderLeftTabContent() {
+  const el = document.getElementById('leftTabContent');
+  switch (activeLeftTab) {
+    case 'tools': renderToolUsage(el); break;
+    case 'skills': renderSkillUsage(el); break;
+    case 'issues': renderIssues(el); break;
+  }
+}
+
+function renderToolUsage(el) {
   const tools = summary.toolUsage || [];
   if (!tools.length) { el.innerHTML = '<div class="empty-state">No tool usage data</div>'; return; }
   const max = tools[0].count;
   el.innerHTML = tools.map(t => `
     <div class="tool-row">
-      <div class="name" title="${esc(t.name)}">${esc(t.name)}</div>
-      <div class="bar-bg"><div class="bar" style="width:${(t.count / max * 100).toFixed(1)}%">${t.count}</div></div>
+      <div class="bar-fill green" style="width:${(t.count / max * 100).toFixed(1)}%"></div>
+      <span class="name" title="${esc(t.name)}">${esc(t.name)}</span>
+      <span class="count">${t.count}</span>
     </div>
   `).join('');
 }
 
-function renderSkillUsage() {
-  const el = document.getElementById('skillUsage');
+function renderSkillUsage(el) {
   const skills = summary.skillUsage || [];
   if (!skills.length) { el.innerHTML = '<div class="empty-state">No skill usage data</div>'; return; }
   const max = skills[0].count;
   el.innerHTML = skills.map(t => `
     <div class="tool-row">
-      <div class="name" title="${esc(t.name)}">${esc(t.name)}</div>
-      <div class="bar-bg"><div class="bar" style="width:${(t.count / max * 100).toFixed(1)}%;background:#bb66ff">${t.count}</div></div>
+      <div class="bar-fill purple" style="width:${(t.count / max * 100).toFixed(1)}%"></div>
+      <span class="name" title="${esc(t.name)}">${esc(t.name)}</span>
+      <span class="count">${t.count}</span>
     </div>
   `).join('');
 }
 
-function renderIssues() {
-  const el = document.getElementById('issueList');
+function renderIssues(el) {
   const orphanIds = new Set(summary.orphanIds || []);
   const interrupts = allEvents.filter(e => e.event === 'Stop' && e.data?.stop_hook_active);
   const orphans = allEvents.filter(e => e.event === 'PreToolUse' && e.data?.tool_use_id && orphanIds.has(e.data.tool_use_id));
@@ -492,13 +683,13 @@ function renderIssues() {
     return;
   }
 
-  let html = '';
+  let html = '<div class="issues-hint">Interrupts: sessions terminated by the stop hook while still active<br>Orphans: tool calls without a completion response (interrupted/session ended)</div>';
   for (const ev of interrupts) {
     const idx = allEvents.indexOf(ev);
     html += `
       <div class="issue-item interrupt-item" onclick="scrollToEvent(${idx})">
         <div class="issue-label red">&#9889; Interrupt</div>
-        <div class="issue-detail">${formatTime(ev.ts)} &middot; session ${ev.session_id?.slice(0, 8)}</div>
+        <div class="issue-detail">${formatRelativeTime(ev.ts)} ago &middot; session ${ev.session_id?.slice(0, 8)}</div>
       </div>
     `;
   }
@@ -507,7 +698,7 @@ function renderIssues() {
     html += `
       <div class="issue-item orphan-item" onclick="scrollToEvent(${idx})">
         <div class="issue-label yellow">&#9888; Orphan Tool Call</div>
-        <div class="issue-detail">${esc(ev.data.tool_name)} &middot; ${formatTime(ev.ts)} &middot; session ${ev.session_id?.slice(0, 8)}</div>
+        <div class="issue-detail">${esc(ev.data.tool_name)} &middot; ${formatRelativeTime(ev.ts)} ago &middot; session ${ev.session_id?.slice(0, 8)}</div>
       </div>
     `;
   }
@@ -518,6 +709,7 @@ function renderFilters() {
   const el = document.getElementById('timelineFilters');
   const presentTypes = new Set(allEvents.map(e => e.event));
   let html = '<button class="filter-btn reset-btn" onclick="resetFilters()">Reset</button>';
+  html += '<button class="filter-btn issues-btn" onclick="filterIssuesOnly()">&#9888; Issues Only</button>';
   for (const [type, info] of Object.entries(EVENT_TYPES)) {
     if (!presentTypes.has(type)) continue;
     const active = activeFilters.has(type) ? 'active' : '';
@@ -526,6 +718,16 @@ function renderFilters() {
   }
   html += `<input class="search-input" type="text" placeholder="Search..." value="${esc(searchText)}" oninput="onSearch(this.value)">`;
   el.innerHTML = html;
+}
+
+function renderFilterHint() {
+  const el = document.getElementById('filterHint');
+  if (selectedSession) {
+    const shortSid = selectedSession.slice(0, 8);
+    el.innerHTML = `<div class="filter-hint">Filtered by session: ${shortSid} <span class="clear-filter" onclick="clearSessionFilter()">&#10005; clear</span></div>`;
+  } else {
+    el.innerHTML = '';
+  }
 }
 
 function renderTimeline() {
@@ -552,7 +754,6 @@ function renderTimeline() {
     const isOrphan = ev.event === 'PreToolUse' && ev.data?.tool_use_id && orphanIds.has(ev.data.tool_use_id);
     const isInterrupt = ev.event === 'Stop' && ev.data?.stop_hook_active;
     const rowCls = ['event-row', isOrphan ? 'orphan' : ''].filter(Boolean).join(' ');
-    const toolName = ev.data?.tool_name || '';
     const detail = buildDetail(ev);
     const shortSid = (ev.session_id || '').slice(0, 6);
 
@@ -562,11 +763,11 @@ function renderTimeline() {
 
     return `
       <div class="${rowCls}" id="ev-${idx}">
-        <span class="time">${formatTime(ev.ts)}</span>
+        <span class="time" title="${formatAbsTime(ev.ts)}">${formatRelativeTime(ev.ts)}</span>
         <span class="badge ${info.cls}">${info.badge}</span>
         ${extraBadges}
         <span class="detail">${detail}</span>
-        <span class="session-tag">${shortSid}</span>
+        <span class="session-tag clickable" onclick="filterBySession('${ev.session_id || ''}')" title="Filter by this session">${shortSid}</span>
       </div>
     `;
   }).join('');
@@ -596,6 +797,25 @@ function buildDetail(ev) {
 function selectSession(sid) {
   selectedSession = selectedSession === sid ? null : sid;
   renderSessions();
+  renderFilterHint();
+  renderTimeline();
+}
+
+function filterBySession(sid) {
+  if (!sid) return;
+  selectedSession = selectedSession === sid ? null : sid;
+  renderSessions();
+  renderFilterHint();
+  renderTimeline();
+  // Auto-scroll to session card in left panel
+  const sessEl = document.getElementById(`sess-${sid.slice(0, 8)}`);
+  if (sessEl) sessEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function clearSessionFilter() {
+  selectedSession = null;
+  renderSessions();
+  renderFilterHint();
   renderTimeline();
 }
 
@@ -609,6 +829,14 @@ function toggleFilter(type) {
 function filterOnly(type) {
   activeFilters.clear();
   activeFilters.add(type);
+  renderFilters();
+  renderTimeline();
+}
+
+function filterIssuesOnly() {
+  activeFilters.clear();
+  activeFilters.add('Stop');
+  activeFilters.add('PreToolUse');
   renderFilters();
   renderTimeline();
 }
@@ -628,12 +856,12 @@ function onSearch(val) {
 function scrollToEvent(idx) {
   const el = document.getElementById(`ev-${idx}`);
   if (!el) {
-    // Event may be filtered out, clear filters first
     selectedSession = null;
     activeFilters = new Set(Object.keys(EVENT_TYPES));
     searchText = '';
     renderFilters();
     renderSessions();
+    renderFilterHint();
     renderTimeline();
     requestAnimationFrame(() => {
       const el2 = document.getElementById(`ev-${idx}`);
@@ -651,7 +879,17 @@ function scrollToEvent(idx) {
 }
 
 // -- Utilities --
-function formatTime(ts) {
+function formatRelativeTime(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - new Date(ts).getTime();
+  if (diff < 0) return 'future';
+  if (diff < 60000) return 'now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h';
+  return Math.floor(diff / 86400000) + 'd';
+}
+
+function formatAbsTime(ts) {
   if (!ts) return '--:--:--';
   const d = new Date(ts);
   return d.toLocaleTimeString('en-US', { hour12: false });
