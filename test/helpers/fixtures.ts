@@ -1,9 +1,6 @@
-/**
- * Shared test fixtures for settings-merge tests.
- */
+import type { Settings, HooksConfig } from '../../lib/settings-merge.js';
 
-/** Minimal hooks-config with a single event */
-export const minimalHooksConfig = {
+export const minimalHooksConfig: HooksConfig = {
   hooks: {
     Stop: [
       {
@@ -15,8 +12,7 @@ export const minimalHooksConfig = {
   },
 };
 
-/** Full hooks-config matching the project's hooks-config.json */
-export const fullHooksConfig = {
+export const fullHooksConfig: HooksConfig = {
   hooks: {
     SessionStart: [
       { hooks: [{ type: "command", command: "~/.claude/hooks/event-logger.sh" }] },
@@ -51,15 +47,13 @@ export const fullHooksConfig = {
   },
 };
 
-/** All event names from the full config */
-export const allEventNames = [
+export const allEventNames: string[] = [
   "SessionStart", "SessionEnd", "UserPromptSubmit",
   "PreToolUse", "PostToolUse", "PostToolUseFailure",
   "Notification", "Stop", "SubagentStart", "SubagentStop",
 ];
 
-/** Settings object with non-hook keys (env, permissions, model, etc.) */
-export const settingsWithNonHookKeys = {
+export const settingsWithNonHookKeys: Settings = {
   env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1", DISABLE_AUTOUPDATER: "1" },
   permissions: {
     allow: ["Bash(git log *)"],
@@ -71,8 +65,7 @@ export const settingsWithNonHookKeys = {
   promptSuggestionEnabled: false,
 };
 
-/** Settings with existing Stop hook that has timeout */
-export const settingsWithStopTimeout = {
+export const settingsWithStopTimeout: Settings = {
   hooks: {
     Stop: [
       {
@@ -84,8 +77,7 @@ export const settingsWithStopTimeout = {
   },
 };
 
-/** Settings with Notification matcher groups (permission_prompt + idle_prompt) */
-export const settingsWithNotificationMatchers = {
+export const settingsWithNotificationMatchers: Settings = {
   hooks: {
     Notification: [
       {
@@ -104,8 +96,7 @@ export const settingsWithNotificationMatchers = {
   },
 };
 
-/** Settings with SessionStart having notification-hook.sh (coexist scenario) */
-export const settingsWithOtherHooks = {
+export const settingsWithOtherHooks: Settings = {
   hooks: {
     SessionStart: [
       {
@@ -117,8 +108,7 @@ export const settingsWithOtherHooks = {
   },
 };
 
-/** Settings with event-logger already registered */
-export const settingsAlreadyRegistered = {
+export const settingsAlreadyRegistered: Settings = {
   hooks: {
     Stop: [
       {
@@ -130,8 +120,7 @@ export const settingsAlreadyRegistered = {
   },
 };
 
-/** Settings with a similar but different command (v2) */
-export const settingsWithV2Logger = {
+export const settingsWithV2Logger: Settings = {
   hooks: {
     Stop: [
       {
@@ -143,5 +132,4 @@ export const settingsWithV2Logger = {
   },
 };
 
-/** Command pattern used for removal */
-export const removePattern = "event-logger\\.sh";
+export const removePattern: string = "event-logger\\.sh";

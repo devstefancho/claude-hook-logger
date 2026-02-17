@@ -27,7 +27,7 @@ fi
 # Remove hooks from settings.json
 echo "Cleaning settings.json..."
 if [[ -f "$SETTINGS" ]]; then
-  node "$SCRIPT_DIR/lib/settings-merge.mjs" uninstall \
+  node "$SCRIPT_DIR/dist/lib/settings-merge-cli.js" uninstall \
     --settings "$SETTINGS" \
     --pattern "event-logger\\.sh"
 else

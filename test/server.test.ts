@@ -7,24 +7,26 @@ import {
   isValidFilename,
   isBuiltinCommand,
   parseLogFile,
+  getLogFiles,
   buildSummary,
   createServer,
-} from "../viewer/server.mjs";
+} from "../viewer/server.js";
+import type { LogEvent } from "../viewer/server.js";
 import {
   startServer,
   stopServer,
   fetchJson,
   fetchRaw,
-} from "./helpers/server-helper.mjs";
+} from "./helpers/server-helper.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function makeTmpDir() {
+function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "server-test-"));
 }
 
-function writeJsonl(dir, filename, events) {
+function writeJsonl(dir: string, filename: string, events: LogEvent[]): void {
   fs.writeFileSync(
     path.join(dir, filename),
     events.map((e) => JSON.stringify(e)).join("\n") + "\n",
@@ -33,7 +35,7 @@ function writeJsonl(dir, filename, events) {
 
 const MINIMAL_HTML = "<html><body>OK</body></html>";
 
-function writeTmpHtml(dir) {
+function writeTmpHtml(dir: string): string {
   const htmlPath = path.join(dir, "index.html");
   fs.writeFileSync(htmlPath, MINIMAL_HTML);
   return htmlPath;
@@ -81,10 +83,32 @@ describe("isValidFilename", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. parseLogFile tests
+// 2. getLogFiles tests
+// ---------------------------------------------------------------------------
+describe("getLogFiles", () => {
+  it("returns empty array when directory does not exist", () => {
+    const result = getLogFiles("/nonexistent/path/abc123");
+    assert.deepEqual(result, []);
+  });
+
+  it("returns matching files sorted reverse", () => {
+    const tmpDir = makeTmpDir();
+    fs.writeFileSync(path.join(tmpDir, "hook-events.jsonl"), "");
+    fs.writeFileSync(path.join(tmpDir, "hook-events.2024-01-15.jsonl"), "");
+    fs.writeFileSync(path.join(tmpDir, "other.txt"), "");
+    const result = getLogFiles(tmpDir);
+    assert.equal(result.length, 2);
+    assert.ok(result.includes("hook-events.jsonl"));
+    assert.ok(result.includes("hook-events.2024-01-15.jsonl"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3. parseLogFile tests
 // ---------------------------------------------------------------------------
 describe("parseLogFile", () => {
-  let tmpDir;
+  let tmpDir: string;
 
   before(() => {
     tmpDir = makeTmpDir();
@@ -95,7 +119,7 @@ describe("parseLogFile", () => {
   });
 
   it("parses valid JSONL with multiple lines", () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "SessionStart", ts: "2024-01-01T00:00:00Z" },
       { event: "PreToolUse", ts: "2024-01-01T00:00:01Z" },
     ];
@@ -118,7 +142,7 @@ describe("parseLogFile", () => {
   });
 
   it("skips malformed JSON lines and keeps good ones", () => {
-    const content = '{"event":"A"}\nBAD LINE\n{"event":"B"}\n';
+    const content = '{"event":"A","ts":"2024-01-01T00:00:00Z"}\nBAD LINE\n{"event":"B","ts":"2024-01-01T00:00:01Z"}\n';
     fs.writeFileSync(path.join(tmpDir, "mixed.jsonl"), content);
     const result = parseLogFile(tmpDir, "mixed.jsonl");
     assert.equal(result.length, 2);
@@ -127,7 +151,7 @@ describe("parseLogFile", () => {
   });
 
   it("skips empty and blank lines", () => {
-    const content = '{"event":"A"}\n\n   \n{"event":"B"}\n\n';
+    const content = '{"event":"A","ts":"2024-01-01T00:00:00Z"}\n\n   \n{"event":"B","ts":"2024-01-01T00:00:01Z"}\n\n';
     fs.writeFileSync(path.join(tmpDir, "blanks.jsonl"), content);
     const result = parseLogFile(tmpDir, "blanks.jsonl");
     assert.equal(result.length, 2);
@@ -153,7 +177,7 @@ describe("buildSummary", () => {
   });
 
   it("tracks single session lifecycle correctly", () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z", cwd: "/home" },
       { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Read", tool_use_id: "t1" } },
       { event: "PostToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Read", tool_use_id: "t1" } },
@@ -170,7 +194,7 @@ describe("buildSummary", () => {
   });
 
   it("detects live session (SessionStart without SessionEnd)", () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z" },
       { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Bash", tool_use_id: "t1" } },
       { event: "PostToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Bash", tool_use_id: "t1" } },
@@ -181,7 +205,7 @@ describe("buildSummary", () => {
   });
 
   it("counts multiple sessions correctly", () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z" },
       { event: "SessionEnd", session_id: "s1", ts: "2024-01-01T00:00:01Z" },
       { event: "SessionStart", session_id: "s2", ts: "2024-01-01T00:01:00Z" },
@@ -192,7 +216,7 @@ describe("buildSummary", () => {
   });
 
   it("sorts tool usage by count descending", () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { tool_name: "Read", tool_use_id: "t1" } },
       { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Write", tool_use_id: "t2" } },
       { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Read", tool_use_id: "t3" } },
@@ -204,13 +228,13 @@ describe("buildSummary", () => {
     ];
     const s = buildSummary(events);
     assert.equal(s.toolUsage[0].name, "Read");
-    assert.equal(s.toolUsage[0].count, 6); // 3 Pre + 3 Post reference Read
+    assert.equal(s.toolUsage[0].count, 6);
     assert.equal(s.toolUsage[1].name, "Write");
-    assert.equal(s.toolUsage[1].count, 2); // 1 Pre + 1 Post reference Write
+    assert.equal(s.toolUsage[1].count, 2);
   });
 
   it("detects orphans (PreToolUse without PostToolUse)", () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z" },
       { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Bash", tool_use_id: "orphan1" } },
       { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Read", tool_use_id: "ok1" } },
@@ -223,7 +247,7 @@ describe("buildSummary", () => {
   });
 
   it("detects interrupts (Stop with stop_hook_active)", () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z" },
       { event: "Stop", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { stop_hook_active: true } },
     ];
@@ -232,8 +256,18 @@ describe("buildSummary", () => {
     assert.equal(s.sessions[0].hasInterrupt, true);
   });
 
+  it("Stop with stop_hook_active=false is not counted as interrupt", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z" },
+      { event: "Stop", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { stop_hook_active: false } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.interruptCount, 0);
+    assert.equal(s.sessions[0].hasInterrupt, false);
+  });
+
   it("sorts sessions by lastTs (most recent first)", () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "SessionStart", session_id: "old", ts: "2024-01-01T00:00:00Z" },
       { event: "SessionEnd", session_id: "old", ts: "2024-01-01T00:00:01Z" },
       { event: "SessionStart", session_id: "new", ts: "2024-01-02T00:00:00Z" },
@@ -245,7 +279,7 @@ describe("buildSummary", () => {
   });
 
   it('groups events without session_id under "unknown"', () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "PreToolUse", ts: "2024-01-01T00:00:00Z", data: { tool_name: "Read", tool_use_id: "t1" } },
       { event: "PostToolUse", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Read", tool_use_id: "t1" } },
     ];
@@ -301,8 +335,19 @@ describe("buildSummary", () => {
     assert.equal(s.skillUsage[0].count, 1);
   });
 
+  it("handles out-of-order timestamps within a session", () => {
+    const events: LogEvent[] = [
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:05Z", data: { tool_name: "Read", tool_use_id: "t1" } },
+      { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z" },
+      { event: "PostToolUse", session_id: "s1", ts: "2024-01-01T00:00:10Z", data: { tool_name: "Read", tool_use_id: "t1" } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.sessions[0].firstTs, "2024-01-01T00:00:00Z");
+    assert.equal(s.sessions[0].lastTs, "2024-01-01T00:00:10Z");
+  });
+
   it("handles mixed events (complete + orphan + interrupt) correctly", () => {
-    const events = [
+    const events: LogEvent[] = [
       { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z", cwd: "/project" },
       { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Read", tool_use_id: "t1" } },
       { event: "PostToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Read", tool_use_id: "t1" } },
@@ -314,7 +359,7 @@ describe("buildSummary", () => {
     assert.equal(s.sessionCount, 1);
     assert.equal(s.orphanCount, 1);
     assert.equal(s.interruptCount, 1);
-    assert.equal(s.liveSessionCount, 1); // no SessionEnd
+    assert.equal(s.liveSessionCount, 1);
     assert.ok(s.orphanIds.includes("orphan1"));
     assert.equal(s.sessions[0].orphanCount, 1);
     assert.equal(s.sessions[0].hasInterrupt, true);
@@ -364,8 +409,8 @@ describe("buildSummary – slash command counting", () => {
     assert.equal(s.skillUsage.length, 2);
     const gitWorktree = s.skillUsage.find(x => x.name === "git-worktree");
     const smartCommit = s.skillUsage.find(x => x.name === "smart-commit");
-    assert.equal(gitWorktree.count, 2);
-    assert.equal(smartCommit.count, 1);
+    assert.equal(gitWorktree!.count, 2);
+    assert.equal(smartCommit!.count, 1);
   });
 
   it("combines PreToolUse Skill and UserPromptSubmit for the same skill name", () => {
@@ -417,18 +462,17 @@ describe("buildSummary – slash command counting", () => {
 // 6. HTTP endpoint tests
 // ---------------------------------------------------------------------------
 describe("HTTP endpoints", () => {
-  let tmpDir;
-  let htmlPath;
-  let server;
-  let port;
-  let baseUrl;
+  let tmpDir: string;
+  let htmlPath: string;
+  let server: import("node:http").Server;
+  let port: number;
+  let baseUrl: string;
 
   before(async () => {
     tmpDir = makeTmpDir();
     htmlPath = writeTmpHtml(tmpDir);
 
-    // Write a sample log file
-    const events = [
+    const events: LogEvent[] = [
       { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z", cwd: "/project" },
       { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Read", tool_use_id: "t1" } },
       { event: "PostToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Read", tool_use_id: "t1" } },
@@ -444,10 +488,16 @@ describe("HTTP endpoints", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("GET /index.html returns 200 with text/html content-type", async () => {
+    const { status, headers } = await fetchRaw(baseUrl, "/index.html");
+    assert.equal(status, 200);
+    assert.ok(headers.get("content-type")!.includes("text/html"));
+  });
+
   it("GET / returns 200 with text/html content-type", async () => {
     const { status, headers, text } = await fetchRaw(baseUrl, "/");
     assert.equal(status, 200);
-    assert.ok(headers.get("content-type").includes("text/html"));
+    assert.ok(headers.get("content-type")!.includes("text/html"));
     assert.ok(text.includes("<html>"));
   });
 
@@ -455,7 +505,13 @@ describe("HTTP endpoints", () => {
     const { status, body } = await fetchJson(baseUrl, "/api/files");
     assert.equal(status, 200);
     assert.ok(Array.isArray(body.files));
-    assert.ok(body.files.includes("hook-events.jsonl"));
+    assert.ok((body.files as string[]).includes("hook-events.jsonl"));
+  });
+
+  it("GET /api/events?file=hook-events.jsonl returns events for specific file", async () => {
+    const { status, body } = await fetchJson(baseUrl, "/api/events?file=hook-events.jsonl");
+    assert.equal(status, 200);
+    assert.equal(body.count, 4);
   });
 
   it("GET /api/events returns 200 with events and count", async () => {
@@ -463,7 +519,7 @@ describe("HTTP endpoints", () => {
     assert.equal(status, 200);
     assert.ok(Array.isArray(body.events));
     assert.equal(body.count, 4);
-    assert.equal(body.events.length, 4);
+    assert.equal((body.events as unknown[]).length, 4);
   });
 
   it("GET /api/events?file=../etc/passwd returns 400 error", async () => {

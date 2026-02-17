@@ -4,12 +4,19 @@
   "description": "Event logging system + web dashboard for Claude Code hooks",
   "type": "module",
   "scripts": {
-    "test": "node --test 'test/**/*.test.mjs'",
-    "test:coverage": "node --test --experimental-test-coverage 'test/**/*.test.mjs'"
+    "build": "tsc && cp viewer/index.html dist/viewer/",
+    "build:check": "tsc --noEmit",
+    "test": "tsx --test 'test/**/*.test.ts'",
+    "test:coverage": "tsx --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-exclude='lib/settings-merge-cli.ts' --test-coverage-exclude='viewer/start.ts' 'test/**/*.test.ts'"
   },
   "keywords": ["claude", "claude-code", "hooks", "logging", "dashboard"],
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
   }
 }
