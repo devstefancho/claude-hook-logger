@@ -40,6 +40,12 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
   exit 1
 fi
 
+# Build TypeScript
+echo "Building TypeScript..."
+(cd "$SCRIPT_DIR" && npm run build)
+echo -e "  ${GREEN}+${NC} dist/ built"
+echo ""
+
 # Create directories
 mkdir -p "$HOOKS_DIR" "$VIEWER_DIR" "$LOGS_DIR"
 
@@ -62,8 +68,11 @@ cp "$SCRIPT_DIR/tools/log-viewer.sh" "$HOOKS_DIR/log-viewer.sh"
 chmod +x "$HOOKS_DIR/log-viewer.sh"
 echo -e "  ${GREEN}+${NC} hooks/log-viewer.sh"
 
-cp "$SCRIPT_DIR/viewer/server.mjs" "$VIEWER_DIR/server.mjs"
-echo -e "  ${GREEN}+${NC} hooks/log-viewer/server.mjs"
+cp "$SCRIPT_DIR/dist/viewer/server.js" "$VIEWER_DIR/server.js"
+echo -e "  ${GREEN}+${NC} hooks/log-viewer/server.js"
+
+cp "$SCRIPT_DIR/dist/viewer/start.js" "$VIEWER_DIR/start.js"
+echo -e "  ${GREEN}+${NC} hooks/log-viewer/start.js"
 
 cp "$SCRIPT_DIR/viewer/index.html" "$VIEWER_DIR/index.html"
 echo -e "  ${GREEN}+${NC} hooks/log-viewer/index.html"
@@ -72,7 +81,7 @@ echo ""
 
 # Merge settings.json
 echo "Merging settings.json..."
-node "$SCRIPT_DIR/lib/settings-merge.mjs" install \
+node "$SCRIPT_DIR/dist/lib/settings-merge-cli.js" install \
   --config "$SCRIPT_DIR/hooks-config.json" \
   --settings "$SETTINGS"
 

@@ -1,11 +1,6 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_LOG_DIR = path.join(process.env.HOME, ".claude", "logs");
-const DEFAULT_PORT = 7777;
 
 const BUILTIN_COMMANDS = new Set([
   // Official docs (code.claude.com/docs/en/interactive-mode)
@@ -22,21 +17,69 @@ const BUILTIN_COMMANDS = new Set([
   "/terminal-setup", "/vim", "/fast", "/slow", "/listen",
 ]);
 
-export function isBuiltinCommand(prompt) {
+export function isBuiltinCommand(prompt: string): boolean {
   const cmd = prompt.split(/\s/)[0].toLowerCase();
   return BUILTIN_COMMANDS.has(cmd);
 }
 
-export function parseLogFile(logDir, filename) {
+export interface LogEvent {
+  event: string;
+  session_id?: string;
+  ts: string;
+  cwd?: string;
+  permission_mode?: string;
+  data?: {
+    tool_name?: string;
+    tool_use_id?: string;
+    tool_input_summary?: string;
+    stop_hook_active?: boolean;
+    prompt?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface SessionInfo {
+  id: string;
+  cwd: string;
+  eventCount: number;
+  firstTs: string;
+  lastTs: string;
+  hasInterrupt: boolean;
+  orphanCount: number;
+  hasSessionStart: boolean;
+  hasSessionEnd: boolean;
+  isLive: boolean;
+}
+
+export interface ToolUsageEntry {
+  name: string;
+  count: number;
+}
+
+export interface Summary {
+  totalEvents: number;
+  sessionCount: number;
+  liveSessionCount: number;
+  toolCount: number;
+  interruptCount: number;
+  orphanCount: number;
+  sessions: SessionInfo[];
+  toolUsage: ToolUsageEntry[];
+  skillUsage: ToolUsageEntry[];
+  orphanIds: string[];
+}
+
+export function parseLogFile(logDir: string, filename: string): LogEvent[] {
   const filePath = path.join(logDir, filename);
   if (!fs.existsSync(filePath)) return [];
   const content = fs.readFileSync(filePath, "utf-8");
-  const events = [];
+  const events: LogEvent[] = [];
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
-      events.push(JSON.parse(trimmed));
+      events.push(JSON.parse(trimmed) as LogEvent);
     } catch {
       // skip malformed lines
     }
@@ -44,12 +87,12 @@ export function parseLogFile(logDir, filename) {
   return events;
 }
 
-export function isValidFilename(file) {
+export function isValidFilename(file: string | null | undefined): boolean {
   if (!file || file.includes("..") || file.includes("/") || file.includes("\\")) return false;
   return /^hook-events[\w.-]*\.jsonl$/.test(file);
 }
 
-export function getLogFiles(logDir) {
+export function getLogFiles(logDir: string): string[] {
   if (!fs.existsSync(logDir)) return [];
   return fs
     .readdirSync(logDir)
@@ -58,21 +101,21 @@ export function getLogFiles(logDir) {
     .reverse();
 }
 
-export function buildSummary(events) {
-  const sessions = new Map();
-  const toolCounts = new Map();
-  const skillCounts = new Map();
-  const preToolIds = new Set();
-  const postToolIds = new Set();
-  const interrupts = [];
-  let totalEvents = events.length;
+export function buildSummary(events: LogEvent[]): Summary {
+  const sessions = new Map<string, SessionInfo>();
+  const toolCounts = new Map<string, number>();
+  const skillCounts = new Map<string, number>();
+  const preToolIds = new Set<string>();
+  const postToolIds = new Set<string>();
+  const interrupts: LogEvent[] = [];
+  const totalEvents = events.length;
 
   for (const ev of events) {
     const sid = ev.session_id || "unknown";
     if (!sessions.has(sid)) {
       sessions.set(sid, {
         id: sid,
-        cwd: ev.cwd || "",
+        cwd: (ev.cwd as string) || "",
         eventCount: 0,
         firstTs: ev.ts,
         lastTs: ev.ts,
@@ -83,7 +126,7 @@ export function buildSummary(events) {
         isLive: false,
       });
     }
-    const sess = sessions.get(sid);
+    const sess = sessions.get(sid)!;
     sess.eventCount++;
     if (ev.ts < sess.firstTs) sess.firstTs = ev.ts;
     if (ev.ts > sess.lastTs) sess.lastTs = ev.ts;
@@ -125,18 +168,15 @@ export function buildSummary(events) {
     }
   }
 
-  // Compute live sessions
   for (const sess of sessions.values()) {
     sess.isLive = sess.hasSessionStart && !sess.hasSessionEnd;
   }
 
-  // Compute orphans
-  const orphanIds = new Set();
+  const orphanIds = new Set<string>();
   for (const id of preToolIds) {
     if (!postToolIds.has(id)) orphanIds.add(id);
   }
 
-  // Assign orphan counts to sessions
   for (const ev of events) {
     if (ev.event === "PreToolUse" && ev.data?.tool_use_id && orphanIds.has(ev.data.tool_use_id)) {
       const sess = sessions.get(ev.session_id || "unknown");
@@ -144,7 +184,7 @@ export function buildSummary(events) {
     }
   }
 
-  const toolUsage = [...toolCounts.entries()]
+  const toolUsage: ToolUsageEntry[] = [...toolCounts.entries()]
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 
@@ -166,7 +206,7 @@ export function buildSummary(events) {
   };
 }
 
-function sendJson(res, data, status = 200) {
+function sendJson(res: http.ServerResponse, data: unknown, status = 200): void {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     "Content-Type": "application/json",
@@ -176,9 +216,9 @@ function sendJson(res, data, status = 200) {
   res.end(body);
 }
 
-export function createServer(logDir, htmlPath) {
+export function createServer(logDir: string, htmlPath: string): http.Server {
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    const url = new URL(req.url!, `http://${req.headers.host || "localhost"}`);
     const pathname = url.pathname;
 
     if (pathname === "/" || pathname === "/index.html") {
@@ -216,23 +256,3 @@ export function createServer(logDir, htmlPath) {
   return server;
 }
 
-// Direct execution
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const PORT = parseInt(process.argv[2] || String(DEFAULT_PORT), 10);
-  const server = createServer(DEFAULT_LOG_DIR, path.join(__dirname, "index.html"));
-
-  server.listen(PORT, () => {
-    console.log(`Hook Events Log Viewer running at http://localhost:${PORT}`);
-    console.log(`Log directory: ${DEFAULT_LOG_DIR}`);
-    console.log("Press Ctrl+C to stop");
-  });
-
-  function shutdown() {
-    console.log("\nShutting down...");
-    server.close(() => process.exit(0));
-    setTimeout(() => process.exit(0), 2000);
-  }
-
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-}

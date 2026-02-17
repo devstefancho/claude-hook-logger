@@ -5,13 +5,14 @@ import path from "node:path";
 import os from "node:os";
 import { execSync } from "node:child_process";
 
-const PROJECT_ROOT = path.resolve(import.meta.dirname, "..");
-const MERGE_SCRIPT = path.join(PROJECT_ROOT, "lib", "settings-merge.mjs");
+const PROJECT_ROOT = path.resolve(import.meta.dirname!, "..");
+const TSX_BIN = path.join(PROJECT_ROOT, "node_modules", ".bin", "tsx");
+const MERGE_SCRIPT = path.join(PROJECT_ROOT, "lib", "settings-merge-cli.ts");
 const HOOKS_CONFIG = path.join(PROJECT_ROOT, "hooks-config.json");
 
 describe("integration: settings-merge CLI", () => {
-  let tmpDir;
-  let settingsPath;
+  let tmpDir: string;
+  let settingsPath: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-hook-test-"));
@@ -22,42 +23,43 @@ describe("integration: settings-merge CLI", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function runInstall() {
+  function runInstall(): string {
     return execSync(
-      `node ${MERGE_SCRIPT} install --config ${HOOKS_CONFIG} --settings ${settingsPath}`,
+      `"${TSX_BIN}" ${MERGE_SCRIPT} install --config ${HOOKS_CONFIG} --settings ${settingsPath}`,
       { encoding: "utf-8", cwd: PROJECT_ROOT },
     );
   }
 
-  function runUninstall() {
+  function runUninstall(): string {
     return execSync(
-      `node ${MERGE_SCRIPT} uninstall --settings ${settingsPath} --pattern "event-logger\\.sh"`,
+      `"${TSX_BIN}" ${MERGE_SCRIPT} uninstall --settings ${settingsPath} --pattern "event-logger\\.sh"`,
       { encoding: "utf-8", cwd: PROJECT_ROOT },
     );
   }
 
-  function readSettings() {
+  function readSettings(): Record<string, unknown> {
     return JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
   }
 
   it("fresh install: merges hooks into empty settings", () => {
-    // No settings.json exists yet
     const output = runInstall();
     assert.match(output, /hooks merged successfully/);
 
     const settings = readSettings();
     assert.ok(settings.hooks, "hooks key should exist");
 
+    const hooks = settings.hooks as Record<string, unknown>;
     const expectedEvents = [
       "SessionStart", "SessionEnd", "UserPromptSubmit",
       "PreToolUse", "PostToolUse", "PostToolUseFailure",
       "Notification", "Stop", "SubagentStart", "SubagentStop",
     ];
     for (const event of expectedEvents) {
-      assert.ok(settings.hooks[event], `hooks.${event} should exist`);
-      assert.ok(Array.isArray(settings.hooks[event]), `hooks.${event} should be array`);
-      const command = settings.hooks[event][0]?.hooks?.[0]?.command;
-      assert.match(command, /event-logger\.sh/, `${event} should reference event-logger.sh`);
+      assert.ok(hooks[event], `hooks.${event} should exist`);
+      assert.ok(Array.isArray(hooks[event]), `hooks.${event} should be array`);
+      const arr = hooks[event] as Array<{ hooks?: Array<{ command?: string }> }>;
+      const command = arr[0]?.hooks?.[0]?.command;
+      assert.match(command!, /event-logger\.sh/, `${event} should reference event-logger.sh`);
     }
   });
 
@@ -69,7 +71,6 @@ describe("integration: settings-merge CLI", () => {
     runInstall();
     const afterReinstall = readSettings();
 
-    // Actually test true idempotency: install twice without uninstall
     fs.rmSync(settingsPath);
     runInstall();
     const firstRun = readSettings();
@@ -94,7 +95,6 @@ describe("integration: settings-merge CLI", () => {
   });
 
   it("reinstall after uninstall: produces clean state", () => {
-    // install → uninstall → install
     runInstall();
     const firstInstall = readSettings();
 
@@ -107,7 +107,6 @@ describe("integration: settings-merge CLI", () => {
   });
 
   it("preserves non-hook data through install/uninstall cycle", () => {
-    // Write settings with existing non-hook data
     const existingSettings = {
       env: { ANTHROPIC_MODEL: "claude-sonnet-4-5-20250929" },
       permissions: { allow: ["Read", "Glob", "Grep"] },
@@ -116,7 +115,6 @@ describe("integration: settings-merge CLI", () => {
     };
     fs.writeFileSync(settingsPath, JSON.stringify(existingSettings, null, 2));
 
-    // Install hooks
     runInstall();
     const afterInstall = readSettings();
     assert.deepStrictEqual(afterInstall.env, existingSettings.env, "env preserved after install");
@@ -125,7 +123,6 @@ describe("integration: settings-merge CLI", () => {
     assert.equal(afterInstall.customKey, existingSettings.customKey, "customKey preserved after install");
     assert.ok(afterInstall.hooks, "hooks added after install");
 
-    // Uninstall hooks
     runUninstall();
     const afterUninstall = readSettings();
     assert.deepStrictEqual(afterUninstall.env, existingSettings.env, "env preserved after uninstall");

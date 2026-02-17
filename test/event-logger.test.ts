@@ -10,9 +10,9 @@ import {
   readLogFile,
   writeLogFile,
   getLogDir,
-} from './helpers/bash-runner.mjs';
+} from './helpers/bash-runner.js';
 
-let tempHome;
+let tempHome: string;
 
 beforeEach(() => {
   tempHome = createTempHome();
@@ -56,7 +56,6 @@ describe('common fields', () => {
     runEventLogger(tempHome, { hook_event_name: 'SessionEnd', session_id: 's1', reason: 'done' });
     const lines = readLogFile(tempHome);
     assert.equal(lines.length, 2);
-    // Each line was parseable (readLogFile would throw otherwise)
     assert.equal(lines[0].event, 'SessionStart');
     assert.equal(lines[1].event, 'SessionEnd');
   });
@@ -74,7 +73,7 @@ describe('common fields', () => {
     for (const field of requiredFields) {
       assert.ok(field in entry, `field "${field}" should be present`);
     }
-    assert.match(entry.ts, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    assert.match(entry.ts as string, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     assert.equal(entry.event, 'Stop');
     assert.equal(entry.session_id, 'abc');
     assert.equal(entry.cwd, '/tmp');
@@ -90,7 +89,7 @@ describe('SessionStart', () => {
       hook_event_name: 'SessionStart',
       source: 'cli',
     });
-    assert.equal(result.logLines[0].data.source, 'cli');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).source, 'cli');
   });
 
   it('captures model field', () => {
@@ -98,13 +97,13 @@ describe('SessionStart', () => {
       hook_event_name: 'SessionStart',
       model: 'claude-sonnet-4-5-20250929',
     });
-    assert.equal(result.logLines[0].data.model, 'claude-sonnet-4-5-20250929');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).model, 'claude-sonnet-4-5-20250929');
   });
 
   it('source and model default to null when missing', () => {
     const result = runEventLogger(tempHome, { hook_event_name: 'SessionStart' });
-    assert.equal(result.logLines[0].data.source, null);
-    assert.equal(result.logLines[0].data.model, null);
+    assert.equal((result.logLines[0].data as Record<string, unknown>).source, null);
+    assert.equal((result.logLines[0].data as Record<string, unknown>).model, null);
   });
 });
 
@@ -116,12 +115,12 @@ describe('SessionEnd', () => {
       hook_event_name: 'SessionEnd',
       reason: 'user_exit',
     });
-    assert.equal(result.logLines[0].data.reason, 'user_exit');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).reason, 'user_exit');
   });
 
   it('reason defaults to null when missing', () => {
     const result = runEventLogger(tempHome, { hook_event_name: 'SessionEnd' });
-    assert.equal(result.logLines[0].data.reason, null);
+    assert.equal((result.logLines[0].data as Record<string, unknown>).reason, null);
   });
 });
 
@@ -133,8 +132,8 @@ describe('UserPromptSubmit', () => {
       hook_event_name: 'UserPromptSubmit',
       prompt: 'Hello world',
     });
-    assert.equal(result.logLines[0].data.prompt, 'Hello world');
-    assert.equal(result.logLines[0].data.prompt_length, 11);
+    assert.equal((result.logLines[0].data as Record<string, unknown>).prompt, 'Hello world');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).prompt_length, 11);
   });
 
   it('truncates prompt to 500 chars', () => {
@@ -143,8 +142,8 @@ describe('UserPromptSubmit', () => {
       hook_event_name: 'UserPromptSubmit',
       prompt: longPrompt,
     });
-    assert.equal(result.logLines[0].data.prompt.length, 500);
-    assert.equal(result.logLines[0].data.prompt_length, 700);
+    assert.equal(((result.logLines[0].data as Record<string, unknown>).prompt as string).length, 500);
+    assert.equal((result.logLines[0].data as Record<string, unknown>).prompt_length, 700);
   });
 
   it('empty prompt yields empty string and length 0', () => {
@@ -152,8 +151,8 @@ describe('UserPromptSubmit', () => {
       hook_event_name: 'UserPromptSubmit',
       prompt: '',
     });
-    assert.equal(result.logLines[0].data.prompt, '');
-    assert.equal(result.logLines[0].data.prompt_length, 0);
+    assert.equal((result.logLines[0].data as Record<string, unknown>).prompt, '');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).prompt_length, 0);
   });
 });
 
@@ -167,7 +166,7 @@ describe('PreToolUse - Bash', () => {
       tool_use_id: 'tu1',
       tool_input: { command: 'ls -la /tmp' },
     });
-    const data = result.logLines[0].data;
+    const data = result.logLines[0].data as Record<string, unknown>;
     assert.equal(data.tool_name, 'Bash');
     assert.equal(data.tool_use_id, 'tu1');
     assert.equal(data.tool_input_summary, 'ls -la /tmp');
@@ -181,7 +180,7 @@ describe('PreToolUse - Bash', () => {
       tool_use_id: 'tu2',
       tool_input: { command: longCmd },
     });
-    assert.equal(result.logLines[0].data.tool_input_summary.length, 200);
+    assert.equal(((result.logLines[0].data as Record<string, unknown>).tool_input_summary as string).length, 200);
   });
 });
 
@@ -195,7 +194,7 @@ describe('PreToolUse - Read', () => {
       tool_use_id: 'tu3',
       tool_input: { file_path: '/src/main.js' },
     });
-    assert.equal(result.logLines[0].data.tool_input_summary, '/src/main.js');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, '/src/main.js');
   });
 });
 
@@ -209,7 +208,7 @@ describe('PreToolUse - Write', () => {
       tool_use_id: 'tu4',
       tool_input: { file_path: '/src/output.txt' },
     });
-    assert.equal(result.logLines[0].data.tool_input_summary, '/src/output.txt');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, '/src/output.txt');
   });
 });
 
@@ -223,7 +222,7 @@ describe('PreToolUse - Edit', () => {
       tool_use_id: 'tu5',
       tool_input: { file_path: '/src/config.json' },
     });
-    assert.equal(result.logLines[0].data.tool_input_summary, '/src/config.json');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, '/src/config.json');
   });
 });
 
@@ -237,7 +236,7 @@ describe('PreToolUse - Glob', () => {
       tool_use_id: 'tu6',
       tool_input: { pattern: '**/*.js' },
     });
-    assert.equal(result.logLines[0].data.tool_input_summary, '**/*.js');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, '**/*.js');
   });
 });
 
@@ -251,7 +250,7 @@ describe('PreToolUse - Grep', () => {
       tool_use_id: 'tu7',
       tool_input: { pattern: 'TODO|FIXME' },
     });
-    assert.equal(result.logLines[0].data.tool_input_summary, 'TODO|FIXME');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, 'TODO|FIXME');
   });
 });
 
@@ -265,7 +264,7 @@ describe('PreToolUse - Task', () => {
       tool_use_id: 'tu8',
       tool_input: { description: 'Run integration tests' },
     });
-    assert.equal(result.logLines[0].data.tool_input_summary, 'Run integration tests');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, 'Run integration tests');
   });
 });
 
@@ -279,7 +278,7 @@ describe('PreToolUse - WebFetch', () => {
       tool_use_id: 'tu9',
       tool_input: { url: 'https://example.com/api' },
     });
-    assert.equal(result.logLines[0].data.tool_input_summary, 'https://example.com/api');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, 'https://example.com/api');
   });
 });
 
@@ -293,7 +292,7 @@ describe('PreToolUse - WebSearch', () => {
       tool_use_id: 'tu10',
       tool_input: { query: 'node.js best practices' },
     });
-    assert.equal(result.logLines[0].data.tool_input_summary, 'node.js best practices');
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, 'node.js best practices');
   });
 });
 
@@ -351,13 +350,13 @@ describe('PreToolUse - unknown tool', () => {
       tool_use_id: 'tu11',
       tool_input: { foo: 'bar', baz: 123 },
     });
-    const summary = result.logLines[0].data.tool_input_summary;
+    const summary = (result.logLines[0].data as Record<string, unknown>).tool_input_summary as string;
     assert.ok(summary.includes('foo'));
     assert.ok(summary.includes('bar'));
   });
 
   it('unknown tool input summary is truncated to 200 chars', () => {
-    const bigInput = {};
+    const bigInput: Record<string, string> = {};
     for (let i = 0; i < 50; i++) {
       bigInput[`key_${i}`] = 'x'.repeat(20);
     }
@@ -367,7 +366,7 @@ describe('PreToolUse - unknown tool', () => {
       tool_use_id: 'tu12',
       tool_input: bigInput,
     });
-    assert.ok(result.logLines[0].data.tool_input_summary.length <= 200);
+    assert.ok(((result.logLines[0].data as Record<string, unknown>).tool_input_summary as string).length <= 200);
   });
 });
 
@@ -380,7 +379,7 @@ describe('PostToolUse', () => {
       tool_name: 'Bash',
       tool_use_id: 'tu20',
     });
-    const data = result.logLines[0].data;
+    const data = result.logLines[0].data as Record<string, unknown>;
     assert.equal(data.tool_name, 'Bash');
     assert.equal(data.tool_use_id, 'tu20');
     assert.equal(data.success, true);
@@ -398,7 +397,7 @@ describe('PostToolUseFailure', () => {
       error: 'command not found',
       is_interrupt: false,
     });
-    const data = result.logLines[0].data;
+    const data = result.logLines[0].data as Record<string, unknown>;
     assert.equal(data.tool_name, 'Bash');
     assert.equal(data.tool_use_id, 'tu21');
     assert.equal(data.error, 'command not found');
@@ -413,7 +412,7 @@ describe('PostToolUseFailure', () => {
       error: 'user interrupted',
       is_interrupt: true,
     });
-    const data = result.logLines[0].data;
+    const data = result.logLines[0].data as Record<string, unknown>;
     assert.equal(data.is_interrupt, true);
   });
 
@@ -425,7 +424,7 @@ describe('PostToolUseFailure', () => {
       tool_use_id: 'tu23',
       error: longError,
     });
-    assert.equal(result.logLines[0].data.error.length, 300);
+    assert.equal(((result.logLines[0].data as Record<string, unknown>).error as string).length, 300);
   });
 });
 
@@ -438,7 +437,7 @@ describe('Notification', () => {
       notification_type: 'info',
       message: 'Build succeeded',
     });
-    const data = result.logLines[0].data;
+    const data = result.logLines[0].data as Record<string, unknown>;
     assert.equal(data.notification_type, 'info');
     assert.equal(data.message, 'Build succeeded');
   });
@@ -452,7 +451,7 @@ describe('Stop', () => {
       hook_event_name: 'Stop',
       stop_hook_active: true,
     });
-    assert.equal(result.logLines[0].data.stop_hook_active, true);
+    assert.equal((result.logLines[0].data as Record<string, unknown>).stop_hook_active, true);
   });
 
   it('captures stop_hook_active=false', () => {
@@ -460,7 +459,7 @@ describe('Stop', () => {
       hook_event_name: 'Stop',
       stop_hook_active: false,
     });
-    assert.equal(result.logLines[0].data.stop_hook_active, false);
+    assert.equal((result.logLines[0].data as Record<string, unknown>).stop_hook_active, false);
   });
 });
 
@@ -473,7 +472,7 @@ describe('SubagentStart', () => {
       agent_id: 'agent-001',
       agent_type: 'researcher',
     });
-    const data = result.logLines[0].data;
+    const data = result.logLines[0].data as Record<string, unknown>;
     assert.equal(data.agent_id, 'agent-001');
     assert.equal(data.agent_type, 'researcher');
   });
@@ -488,7 +487,7 @@ describe('SubagentStop', () => {
       agent_id: 'agent-001',
       agent_type: 'researcher',
     });
-    const data = result.logLines[0].data;
+    const data = result.logLines[0].data as Record<string, unknown>;
     assert.equal(data.agent_id, 'agent-001');
     assert.equal(data.agent_type, 'researcher');
   });
@@ -510,14 +509,12 @@ describe('Unknown event type', () => {
 
 describe('edge cases', () => {
   it('log rotation triggered on SessionStart', () => {
-    // Write an old log entry with a past date
     const yesterday = new Date();
     yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const yStr = yesterday.toISOString().split('T')[0];
     const oldEntry = JSON.stringify({ ts: `${yStr}T10:00:00.000Z`, event: 'Stop', session_id: 's0', cwd: '/', permission_mode: '', data: {} });
     writeLogFile(tempHome, oldEntry + '\n');
 
-    // Run a SessionStart event - this triggers rotate-logs.sh in background
     const result = runEventLogger(tempHome, {
       hook_event_name: 'SessionStart',
       session_id: 's1',
@@ -525,10 +522,8 @@ describe('edge cases', () => {
     });
     assert.equal(result.exitCode, 0);
 
-    // Give the background rotation a moment to complete
     execSync('sleep 0.5');
 
-    // Check that an archive file was created
     const logDir = getLogDir(tempHome);
     const files = readdirSync(logDir);
     const archives = files.filter(f => f.match(/hook-events\.\d{4}-\d{2}-\d{2}\.jsonl/));
@@ -541,8 +536,8 @@ describe('edge cases', () => {
       hook_event_name: 'UserPromptSubmit',
       prompt,
     });
-    assert.equal(result.logLines[0].data.prompt.length, 500);
-    assert.equal(result.logLines[0].data.prompt_length, 600);
+    assert.equal(((result.logLines[0].data as Record<string, unknown>).prompt as string).length, 500);
+    assert.equal((result.logLines[0].data as Record<string, unknown>).prompt_length, 600);
   });
 
   it('special characters in prompt (quotes, newlines) handled correctly', () => {
@@ -552,9 +547,8 @@ describe('edge cases', () => {
       prompt,
     });
     assert.equal(result.exitCode, 0);
-    assert.equal(result.logLines[0].data.prompt_length, prompt.length);
-    // The prompt may have newlines converted by head -c, but should still be valid
-    assert.ok(result.logLines[0].data.prompt.includes('He said'));
+    assert.equal((result.logLines[0].data as Record<string, unknown>).prompt_length, prompt.length);
+    assert.ok(((result.logLines[0].data as Record<string, unknown>).prompt as string).includes('He said'));
   });
 
   it('multiple events append to same file (JSONL)', () => {
@@ -570,7 +564,6 @@ describe('edge cases', () => {
   });
 
   it('log directory created if missing', () => {
-    // Remove the log directory
     const logDir = getLogDir(tempHome);
     rmSync(logDir, { recursive: true, force: true });
     assert.ok(!existsSync(logDir));
@@ -588,6 +581,6 @@ describe('edge cases', () => {
       tool_use_id: 'tu99',
       tool_input: { command: longCmd },
     });
-    assert.ok(result.logLines[0].data.tool_input_summary.length <= 200);
+    assert.ok(((result.logLines[0].data as Record<string, unknown>).tool_input_summary as string).length <= 200);
   });
 });

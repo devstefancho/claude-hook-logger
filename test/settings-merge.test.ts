@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { loadSettings, saveSettings, mergeHooks, removeHooks } from '../lib/settings-merge.mjs';
+import { loadSettings, saveSettings, mergeHooks, removeHooks } from '../lib/settings-merge.js';
 import {
   fullHooksConfig,
   minimalHooksConfig,
@@ -16,9 +16,9 @@ import {
   settingsAlreadyRegistered,
   settingsWithV2Logger,
   removePattern,
-} from './helpers/fixtures.mjs';
+} from './helpers/fixtures.js';
 
-let tmpDir;
+let tmpDir: string;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-merge-test-'));
@@ -69,8 +69,8 @@ describe('loadSettings', () => {
     const data = { env: { A: '1' }, model: 'sonnet' };
     fs.writeFileSync(fp, JSON.stringify(data), 'utf-8');
     const result = loadSettings(fp);
-    assert.deepStrictEqual(result, data);
     assert.equal(result.hooks, undefined);
+    assert.deepStrictEqual(result, data);
   });
 });
 
@@ -81,15 +81,15 @@ describe('mergeHooks', () => {
     const result = mergeHooks({}, fullHooksConfig);
     assert.ok(result.hooks, 'should have hooks key');
     for (const ev of allEventNames) {
-      assert.ok(result.hooks[ev], `should have ${ev}`);
-      assert.ok(Array.isArray(result.hooks[ev]), `${ev} should be an array`);
+      assert.ok(result.hooks![ev], `should have ${ev}`);
+      assert.ok(Array.isArray(result.hooks![ev]), `${ev} should be an array`);
     }
   });
 
   it('empty hooks {} → adds all events', () => {
     const result = mergeHooks({ hooks: {} }, fullHooksConfig);
     for (const ev of allEventNames) {
-      assert.ok(result.hooks[ev], `should have ${ev}`);
+      assert.ok(result.hooks![ev], `should have ${ev}`);
     }
   });
 
@@ -100,11 +100,9 @@ describe('mergeHooks', () => {
       },
     };
     const result = mergeHooks(settings, fullHooksConfig);
-    // Stop should be unchanged (already registered)
-    assert.equal(result.hooks.Stop.length, 1);
-    // Missing events should be added
-    assert.ok(result.hooks.SessionStart);
-    assert.ok(result.hooks.PreToolUse);
+    assert.equal(result.hooks!.Stop.length, 1);
+    assert.ok(result.hooks!.SessionStart);
+    assert.ok(result.hooks!.PreToolUse);
   });
 
   it('already registered → no change (idempotent)', () => {
@@ -122,19 +120,17 @@ describe('mergeHooks', () => {
 
   it('coexist with other hooks (SessionStart has notification-hook.sh)', () => {
     const result = mergeHooks(settingsWithOtherHooks, fullHooksConfig);
-    // Should have both: the original notification-hook + new event-logger
-    assert.equal(result.hooks.SessionStart.length, 2);
-    assert.equal(result.hooks.SessionStart[0].hooks[0].command, '~/.claude/hooks/notification-hook.sh');
-    assert.equal(result.hooks.SessionStart[1].hooks[0].command, '~/.claude/hooks/event-logger.sh');
+    assert.equal(result.hooks!.SessionStart.length, 2);
+    assert.equal(result.hooks!.SessionStart[0].hooks[0].command, '~/.claude/hooks/notification-hook.sh');
+    assert.equal(result.hooks!.SessionStart[1].hooks[0].command, '~/.claude/hooks/event-logger.sh');
   });
 
   it('notification matcher coexist (permission_prompt preserved + new group appended)', () => {
     const result = mergeHooks(settingsWithNotificationMatchers, fullHooksConfig);
-    // Should have original 2 matcher groups + 1 new event-logger group
-    assert.equal(result.hooks.Notification.length, 3);
-    assert.equal(result.hooks.Notification[0].matcher, 'permission_prompt');
-    assert.equal(result.hooks.Notification[1].matcher, 'idle_prompt');
-    assert.equal(result.hooks.Notification[2].hooks[0].command, '~/.claude/hooks/event-logger.sh');
+    assert.equal(result.hooks!.Notification.length, 3);
+    assert.equal(result.hooks!.Notification[0].matcher, 'permission_prompt');
+    assert.equal(result.hooks!.Notification[1].matcher, 'idle_prompt');
+    assert.equal(result.hooks!.Notification[2].hooks[0].command, '~/.claude/hooks/event-logger.sh');
   });
 
   it('async flag preservation on existing hooks', () => {
@@ -146,26 +142,22 @@ describe('mergeHooks', () => {
       },
     };
     const result = mergeHooks(settings, fullHooksConfig);
-    // Original hook's async flag should be preserved
-    assert.equal(result.hooks.SessionEnd[0].hooks[0].async, true);
-    assert.equal(result.hooks.SessionEnd[0].hooks[0].command, '~/.claude/hooks/other.sh');
+    assert.equal(result.hooks!.SessionEnd[0].hooks[0].async, true);
+    assert.equal(result.hooks!.SessionEnd[0].hooks[0].command, '~/.claude/hooks/other.sh');
   });
 
   it('timeout preservation on existing hooks (Stop with stop-speak.sh timeout:15)', () => {
     const result = mergeHooks(settingsWithStopTimeout, fullHooksConfig);
-    // stop-speak.sh with timeout should be preserved
-    assert.equal(result.hooks.Stop[0].hooks[0].command, '~/.claude/hooks/stop-speak.sh');
-    assert.equal(result.hooks.Stop[0].hooks[0].timeout, 15);
-    // event-logger should be appended as second group
-    assert.equal(result.hooks.Stop[1].hooks[0].command, '~/.claude/hooks/event-logger.sh');
+    assert.equal(result.hooks!.Stop[0].hooks[0].command, '~/.claude/hooks/stop-speak.sh');
+    assert.equal(result.hooks!.Stop[0].hooks[0].timeout, 15);
+    assert.equal(result.hooks!.Stop[1].hooks[0].command, '~/.claude/hooks/event-logger.sh');
   });
 
   it('exact command pattern matching (event-logger-v2.sh !== event-logger.sh)', () => {
     const result = mergeHooks(settingsWithV2Logger, minimalHooksConfig);
-    // Both should coexist (v2 is not the same as the target)
-    assert.equal(result.hooks.Stop.length, 2);
-    assert.equal(result.hooks.Stop[0].hooks[0].command, '~/.claude/hooks/event-logger-v2.sh');
-    assert.equal(result.hooks.Stop[1].hooks[0].command, '~/.claude/hooks/event-logger.sh');
+    assert.equal(result.hooks!.Stop.length, 2);
+    assert.equal(result.hooks!.Stop[0].hooks[0].command, '~/.claude/hooks/event-logger-v2.sh');
+    assert.equal(result.hooks!.Stop[1].hooks[0].command, '~/.claude/hooks/event-logger.sh');
   });
 
   it('order preservation (existing hooks=[A, B] → result=[A, B, event-logger])', () => {
@@ -178,10 +170,10 @@ describe('mergeHooks', () => {
       },
     };
     const result = mergeHooks(settings, minimalHooksConfig);
-    assert.equal(result.hooks.Stop.length, 3);
-    assert.equal(result.hooks.Stop[0].hooks[0].command, 'A.sh');
-    assert.equal(result.hooks.Stop[1].hooks[0].command, 'B.sh');
-    assert.equal(result.hooks.Stop[2].hooks[0].command, '~/.claude/hooks/event-logger.sh');
+    assert.equal(result.hooks!.Stop.length, 3);
+    assert.equal(result.hooks!.Stop[0].hooks[0].command, 'A.sh');
+    assert.equal(result.hooks!.Stop[1].hooks[0].command, 'B.sh');
+    assert.equal(result.hooks!.Stop[2].hooks[0].command, '~/.claude/hooks/event-logger.sh');
   });
 
   it('non-hook keys preserved (env, permissions, model, statusLine, enabledPlugins)', () => {
@@ -196,14 +188,13 @@ describe('mergeHooks', () => {
 
   it('full real settings.json test (load, merge, verify structure intact)', () => {
     const realSettingsPath = path.join(os.homedir(), '.claude', 'settings.json');
-    if (!fs.existsSync(realSettingsPath)) return; // skip if not available
+    if (!fs.existsSync(realSettingsPath)) return;
 
     const settings = loadSettings(realSettingsPath);
     const configPath = path.resolve('hooks-config.json');
     const hooksConfig = loadSettings(configPath);
     const merged = mergeHooks(settings, hooksConfig);
 
-    // Non-hook keys should be preserved exactly
     assert.deepStrictEqual(merged.env, settings.env);
     assert.deepStrictEqual(merged.permissions, settings.permissions);
     assert.equal(merged.model, settings.model);
@@ -211,12 +202,10 @@ describe('mergeHooks', () => {
     assert.deepStrictEqual(merged.enabledPlugins, settings.enabledPlugins);
     assert.equal(merged.promptSuggestionEnabled, settings.promptSuggestionEnabled);
 
-    // All hook events should be present
     for (const ev of allEventNames) {
-      assert.ok(merged.hooks[ev], `merged should have ${ev}`);
+      assert.ok(merged.hooks![ev], `merged should have ${ev}`);
     }
 
-    // Idempotent: merging again should produce the same result
     const mergedAgain = mergeHooks(merged, hooksConfig);
     assert.deepStrictEqual(mergedAgain, merged);
   });
@@ -237,9 +226,68 @@ describe('mergeHooks', () => {
     const config = { hooks: { Stop: [] } };
     const settings = { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'x.sh' }] }] } };
     const result = mergeHooks(settings, config);
-    // Stop should remain unchanged because config's Stop array is empty
-    assert.equal(result.hooks.Stop.length, 1);
-    assert.equal(result.hooks.Stop[0].hooks[0].command, 'x.sh');
+    assert.equal(result.hooks!.Stop.length, 1);
+    assert.equal(result.hooks!.Stop[0].hooks[0].command, 'x.sh');
+  });
+
+  it('existing event groups is not an array → skip gracefully', () => {
+    const settings = { hooks: { Stop: 'not-an-array' as any } };
+    const result = mergeHooks(settings, minimalHooksConfig);
+    assert.equal(result.hooks!.Stop, 'not-an-array');
+  });
+
+  it('existing group with non-array hooks → skip during duplicate check', () => {
+    const settings = {
+      hooks: {
+        Stop: [{ hooks: 'not-hooks-array' as any }],
+      },
+    };
+    const result = mergeHooks(settings, minimalHooksConfig);
+    assert.equal(result.hooks!.Stop.length, 2);
+    assert.equal(result.hooks!.Stop[0].hooks, 'not-hooks-array');
+  });
+
+  it('existing group with falsy hook entries → skip during duplicate check', () => {
+    const settings = {
+      hooks: {
+        Stop: [{ hooks: [null as any, { type: 'other', command: 'x.sh' }] }],
+      },
+    };
+    const result = mergeHooks(settings, minimalHooksConfig);
+    assert.equal(result.hooks!.Stop.length, 2);
+  });
+
+  it('config first group has no command → skip event', () => {
+    const config = {
+      hooks: {
+        Stop: [{ hooks: [{ type: 'command' }] }] as any,
+      },
+    };
+    const settings = { hooks: {} };
+    const result = mergeHooks(settings, config);
+    assert.equal(result.hooks!.Stop, undefined);
+  });
+
+  it('config group with no hooks property → skip event', () => {
+    const config = {
+      hooks: {
+        Stop: [{}] as any,
+      },
+    };
+    const settings = { hooks: {} };
+    const result = mergeHooks(settings, config);
+    assert.equal(result.hooks!.Stop, undefined);
+  });
+
+  it('config group with empty hooks array → skip event', () => {
+    const config = {
+      hooks: {
+        Stop: [{ hooks: [] }] as any,
+      },
+    };
+    const settings = { hooks: {} };
+    const result = mergeHooks(settings, config);
+    assert.equal(result.hooks!.Stop, undefined);
   });
 });
 
@@ -249,7 +297,6 @@ describe('removeHooks', () => {
   it('normal removal (fully registered → all event-logger entries removed)', () => {
     const merged = mergeHooks({}, fullHooksConfig);
     const result = removeHooks(merged, removePattern);
-    // All event-logger hooks should be removed; hooks key should be gone
     assert.equal(result.hooks, undefined);
   });
 
@@ -274,11 +321,10 @@ describe('removeHooks', () => {
       },
     };
     const result = removeHooks(settings, removePattern);
-    // notification-hook should remain
-    assert.equal(result.hooks.Notification.length, 1);
-    assert.equal(result.hooks.Notification[0].hooks.length, 1);
-    assert.equal(result.hooks.Notification[0].hooks[0].command, '~/.claude/hooks/notification-hook.sh');
-    assert.equal(result.hooks.Notification[0].matcher, 'permission_prompt');
+    assert.equal(result.hooks!.Notification.length, 1);
+    assert.equal(result.hooks!.Notification[0].hooks.length, 1);
+    assert.equal(result.hooks!.Notification[0].hooks[0].command, '~/.claude/hooks/notification-hook.sh');
+    assert.equal(result.hooks!.Notification[0].matcher, 'permission_prompt');
   });
 
   it('sole hook in matcher group → group removed', () => {
@@ -293,10 +339,8 @@ describe('removeHooks', () => {
       },
     };
     const result = removeHooks(settings, removePattern);
-    // Stop event should be removed entirely
-    assert.equal(result.hooks.Stop, undefined);
-    // SessionStart should remain
-    assert.ok(result.hooks.SessionStart);
+    assert.equal(result.hooks!.Stop, undefined);
+    assert.ok(result.hooks!.SessionStart);
   });
 
   it('empty event array after removal → event key removed', () => {
@@ -327,21 +371,68 @@ describe('removeHooks', () => {
       },
     };
     const result = removeHooks(settings, removePattern);
-    // event-logger-v2.sh matches the pattern "event-logger\.sh" because the dot matches any char
-    // Actually "event-logger\.sh" as regex: event-logger.sh → the \. matches literal dot
-    // "event-logger-v2.sh" - does "event-logger.sh" match? The regex is event-logger\.sh
-    // The pattern is "event-logger\.sh" which means literal "event-logger.sh"
-    // "event-logger-v2.sh" does NOT contain the literal substring "event-logger.sh"
-    // So v2 should NOT be removed
     assert.ok(result.hooks);
-    assert.ok(result.hooks.Stop);
-    assert.equal(result.hooks.Stop[0].hooks[0].command, '~/.claude/hooks/event-logger-v2.sh');
+    assert.ok(result.hooks!.Stop);
+    assert.equal(result.hooks!.Stop[0].hooks[0].command, '~/.claude/hooks/event-logger-v2.sh');
   });
 
   it('no hooks in settings → no change', () => {
     const settings = { model: 'opus', env: { A: '1' } };
     const result = removeHooks(settings, removePattern);
     assert.deepStrictEqual(result, settings);
+  });
+
+  it('matcher group without hooks array → preserved as-is', () => {
+    const settings = {
+      hooks: {
+        Stop: [
+          { matcher: 'some_pattern' } as any,
+          { hooks: [{ type: 'command', command: '~/.claude/hooks/event-logger.sh' }] },
+        ],
+      },
+    };
+    const result = removeHooks(settings, removePattern);
+    assert.equal(result.hooks!.Stop.length, 1);
+    assert.equal(result.hooks!.Stop[0].matcher, 'some_pattern');
+  });
+
+  it('hooks array with falsy entries → pattern filter handles gracefully', () => {
+    const settings = {
+      hooks: {
+        Stop: [
+          { hooks: [null as any, { type: 'command', command: '~/.claude/hooks/event-logger.sh' }] },
+        ],
+      },
+    };
+    const result = removeHooks(settings, removePattern);
+    assert.equal(result.hooks!.Stop.length, 1);
+    assert.equal(result.hooks!.Stop[0].hooks.length, 1);
+    assert.equal(result.hooks!.Stop[0].hooks[0], null);
+  });
+
+  it('hooks with non-command type → not matched by pattern', () => {
+    const settings = {
+      hooks: {
+        Stop: [
+          { hooks: [{ type: 'shell', command: '~/.claude/hooks/event-logger.sh' }] },
+        ],
+      },
+    };
+    const result = removeHooks(settings, removePattern);
+    assert.equal(result.hooks!.Stop.length, 1);
+    assert.equal(result.hooks!.Stop[0].hooks[0].type, 'shell');
+  });
+
+  it('non-array matcherGroups → skip gracefully', () => {
+    const settings = {
+      hooks: {
+        Stop: 'not-an-array' as any,
+        SessionStart: [{ hooks: [{ type: 'command', command: '~/.claude/hooks/event-logger.sh' }] }],
+      },
+    };
+    const result = removeHooks(settings, removePattern);
+    assert.equal(result.hooks!.Stop, 'not-an-array');
+    assert.equal(result.hooks!.SessionStart, undefined);
   });
 });
 
@@ -385,14 +476,15 @@ describe('saveSettings', () => {
 // ─── 5. CLI integration ─────────────────────────────────────────────────────
 
 describe('CLI integration', () => {
-  const cliPath = path.resolve('lib/settings-merge.mjs');
+  const tsxBin = path.resolve('node_modules', '.bin', 'tsx');
+  const cliPath = path.resolve('lib/settings-merge-cli.ts');
   const configPath = path.resolve('hooks-config.json');
 
   it('install command merges hooks', () => {
     const settingsFile = path.join(tmpDir, 'settings.json');
     fs.writeFileSync(settingsFile, JSON.stringify({ model: 'opus' }), 'utf-8');
 
-    const result = execFileSync('node', [cliPath, 'install', '--config', configPath, '--settings', settingsFile], {
+    const result = execFileSync(tsxBin, [cliPath, 'install', '--config', configPath, '--settings', settingsFile], {
       encoding: 'utf-8',
     });
     assert.ok(result.includes('hooks merged successfully'));
@@ -408,13 +500,11 @@ describe('CLI integration', () => {
     const settingsFile = path.join(tmpDir, 'settings.json');
     fs.writeFileSync(settingsFile, JSON.stringify({ model: 'opus' }), 'utf-8');
 
-    // First install
-    execFileSync('node', [cliPath, 'install', '--config', configPath, '--settings', settingsFile], {
+    execFileSync(tsxBin, [cliPath, 'install', '--config', configPath, '--settings', settingsFile], {
       encoding: 'utf-8',
     });
 
-    // Second install
-    const result = execFileSync('node', [cliPath, 'install', '--config', configPath, '--settings', settingsFile], {
+    const result = execFileSync(tsxBin, [cliPath, 'install', '--config', configPath, '--settings', settingsFile], {
       encoding: 'utf-8',
     });
     assert.ok(result.includes('already registered'));
@@ -424,13 +514,11 @@ describe('CLI integration', () => {
     const settingsFile = path.join(tmpDir, 'settings.json');
     fs.writeFileSync(settingsFile, JSON.stringify({ model: 'opus' }), 'utf-8');
 
-    // First install
-    execFileSync('node', [cliPath, 'install', '--config', configPath, '--settings', settingsFile], {
+    execFileSync(tsxBin, [cliPath, 'install', '--config', configPath, '--settings', settingsFile], {
       encoding: 'utf-8',
     });
 
-    // Then uninstall
-    const result = execFileSync('node', [cliPath, 'uninstall', '--settings', settingsFile, '--pattern', removePattern], {
+    const result = execFileSync(tsxBin, [cliPath, 'uninstall', '--settings', settingsFile, '--pattern', removePattern], {
       encoding: 'utf-8',
     });
     assert.ok(result.includes('hooks removed successfully'));
@@ -444,8 +532,7 @@ describe('CLI integration', () => {
     const settingsFile = path.join(tmpDir, 'settings.json');
     fs.writeFileSync(settingsFile, JSON.stringify({ model: 'opus' }), 'utf-8');
 
-    // Uninstall when nothing is installed
-    const result = execFileSync('node', [cliPath, 'uninstall', '--settings', settingsFile, '--pattern', removePattern], {
+    const result = execFileSync(tsxBin, [cliPath, 'uninstall', '--settings', settingsFile, '--pattern', removePattern], {
       encoding: 'utf-8',
     });
     assert.ok(result.includes('no matching hooks found'));

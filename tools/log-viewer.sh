@@ -21,7 +21,7 @@ is_running() {
   kill -0 "$pid" 2>/dev/null || { rm -f "$PIDFILE"; return 1; }
 
   # 우리 node server.mjs 프로세스가 맞는지 확인
-  ps -p "$pid" -o command= 2>/dev/null | grep -q "node.*server\.mjs" || { rm -f "$PIDFILE"; return 1; }
+  ps -p "$pid" -o command= 2>/dev/null | grep -q "node.*start\.js" || { rm -f "$PIDFILE"; return 1; }
 
   return 0
 }
@@ -92,13 +92,13 @@ if ! command -v node &>/dev/null; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVER="$SCRIPT_DIR/log-viewer/server.mjs"
+SERVER="$SCRIPT_DIR/log-viewer/start.js"
 if [[ ! -f "$SERVER" ]]; then
-  SERVER="$SCRIPT_DIR/../viewer/server.mjs"
+  SERVER="$SCRIPT_DIR/../dist/viewer/start.js"
 fi
 
 if [[ ! -f "$SERVER" ]]; then
-  echo "Error: server.mjs not found at $SERVER"
+  echo "Error: server.js not found at $SERVER"
   exit 1
 fi
 
