@@ -320,6 +320,10 @@
       <div class="panel-body" id="toolUsage"></div>
     </div>
     <div class="panel">
+      <div class="panel-title">Skill Usage</div>
+      <div class="panel-body" id="skillUsage"></div>
+    </div>
+    <div class="panel">
       <div class="panel-title">Interrupt & Orphan Analysis</div>
       <div class="panel-body" id="issueList"></div>
     </div>
@@ -406,6 +410,7 @@ function render() {
   renderSummary();
   renderSessions();
   renderToolUsage();
+  renderSkillUsage();
   renderIssues();
   renderFilters();
   renderTimeline();
@@ -459,6 +464,19 @@ function renderToolUsage() {
     <div class="tool-row">
       <div class="name" title="${esc(t.name)}">${esc(t.name)}</div>
       <div class="bar-bg"><div class="bar" style="width:${(t.count / max * 100).toFixed(1)}%">${t.count}</div></div>
+    </div>
+  `).join('');
+}
+
+function renderSkillUsage() {
+  const el = document.getElementById('skillUsage');
+  const skills = summary.skillUsage || [];
+  if (!skills.length) { el.innerHTML = '<div class="empty-state">No skill usage data</div>'; return; }
+  const max = skills[0].count;
+  el.innerHTML = skills.map(t => `
+    <div class="tool-row">
+      <div class="name" title="${esc(t.name)}">${esc(t.name)}</div>
+      <div class="bar-bg"><div class="bar" style="width:${(t.count / max * 100).toFixed(1)}%;background:#bb66ff">${t.count}</div></div>
     </div>
   `).join('');
 }
@@ -650,7 +668,11 @@ function esc(s) {
 }
 
 // -- Init --
-loadFiles().then(loadData);
+loadFiles().then(loadData).then(() => {
+  autoRefreshId = setInterval(checkForUpdates, 5000);
+  document.getElementById('autoRefreshBtn').textContent = 'Auto-refresh: ON';
+  document.getElementById('autoRefreshBtn').classList.add('active');
+});
 </script>
 </body>
 </html>

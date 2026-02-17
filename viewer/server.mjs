@@ -7,6 +7,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_LOG_DIR = path.join(process.env.HOME, ".claude", "logs");
 const DEFAULT_PORT = 7777;
 
+const BUILTIN_COMMANDS = new Set([
+  // Official docs (code.claude.com/docs/en/interactive-mode)
+  "/clear", "/compact", "/config", "/context", "/copy", "/cost",
+  "/debug", "/desktop", "/doctor", "/exit", "/export", "/help",
+  "/init", "/mcp", "/memory", "/model", "/permissions", "/plan",
+  "/rename", "/resume", "/rewind", "/stats", "/status", "/statusline",
+  "/tasks", "/teleport", "/theme", "/todos", "/usage",
+  // Additional built-in commands
+  "/add-dir", "/agents", "/bug", "/hooks", "/ide",
+  "/install-github-app", "/login", "/logout", "/output-style",
+  "/plugin", "/pr-comments", "/privacy-settings", "/release-notes",
+  "/remote-env", "/review", "/sandbox", "/security-review",
+  "/terminal-setup", "/vim", "/fast", "/slow", "/listen",
+]);
+
+export function isBuiltinCommand(prompt) {
+  const cmd = prompt.split(/\s/)[0].toLowerCase();
+  return BUILTIN_COMMANDS.has(cmd);
+}
+
 export function parseLogFile(logDir, filename) {
   const filePath = path.join(logDir, filename);
   if (!fs.existsSync(filePath)) return [];
@@ -41,6 +61,7 @@ export function getLogFiles(logDir) {
 export function buildSummary(events) {
   const sessions = new Map();
   const toolCounts = new Map();
+  const skillCounts = new Map();
   const preToolIds = new Set();
   const postToolIds = new Set();
   const interrupts = [];
@@ -72,6 +93,20 @@ export function buildSummary(events) {
 
     if (toolName) {
       toolCounts.set(toolName, (toolCounts.get(toolName) || 0) + 1);
+    }
+
+    if (ev.event === "PreToolUse" && toolName === "Skill") {
+      const skillName = ev.data?.tool_input_summary || "unknown";
+      skillCounts.set(skillName, (skillCounts.get(skillName) || 0) + 1);
+    }
+
+    // UserPromptSubmit에서 slash command 감지 (유저가 직접 호출한 경우)
+    if (ev.event === "UserPromptSubmit") {
+      const prompt = (ev.data?.prompt || "").trim();
+      if (prompt.startsWith("/") && !isBuiltinCommand(prompt)) {
+        const skillName = prompt.split(/\s/)[0].slice(1); // "/" 제거
+        skillCounts.set(skillName, (skillCounts.get(skillName) || 0) + 1);
+      }
     }
 
     if (ev.event === "PreToolUse" && toolUseId) {
@@ -113,6 +148,10 @@ export function buildSummary(events) {
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 
+  const skillUsage = [...skillCounts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+
   return {
     totalEvents,
     sessionCount: sessions.size,
@@ -122,6 +161,7 @@ export function buildSummary(events) {
     orphanCount: orphanIds.size,
     sessions: [...sessions.values()].sort((a, b) => (b.lastTs > a.lastTs ? 1 : -1)),
     toolUsage,
+    skillUsage,
     orphanIds: [...orphanIds],
   };
 }

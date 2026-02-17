@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   isValidFilename,
+  isBuiltinCommand,
   parseLogFile,
   buildSummary,
   createServer,
@@ -147,6 +148,7 @@ describe("buildSummary", () => {
     assert.equal(s.orphanCount, 0);
     assert.deepEqual(s.sessions, []);
     assert.deepEqual(s.toolUsage, []);
+    assert.deepEqual(s.skillUsage, []);
     assert.deepEqual(s.orphanIds, []);
   });
 
@@ -252,6 +254,53 @@ describe("buildSummary", () => {
     assert.equal(s.sessions[0].id, "unknown");
   });
 
+  it("counts individual skills separately in skillUsage", () => {
+    const events = [
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { tool_name: "Skill", tool_use_id: "sk1", tool_input_summary: "commit" } },
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Skill", tool_use_id: "sk2", tool_input_summary: "commit" } },
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Skill", tool_use_id: "sk3", tool_input_summary: "review-pr" } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.skillUsage.length, 2);
+    assert.equal(s.skillUsage[0].name, "commit");
+    assert.equal(s.skillUsage[0].count, 2);
+    assert.equal(s.skillUsage[1].name, "review-pr");
+    assert.equal(s.skillUsage[1].count, 1);
+  });
+
+  it("sorts skillUsage by count descending", () => {
+    const events = [
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { tool_name: "Skill", tool_use_id: "sk1", tool_input_summary: "review-pr" } },
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Skill", tool_use_id: "sk2", tool_input_summary: "commit" } },
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Skill", tool_use_id: "sk3", tool_input_summary: "commit" } },
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:03Z", data: { tool_name: "Skill", tool_use_id: "sk4", tool_input_summary: "commit" } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.skillUsage[0].name, "commit");
+    assert.equal(s.skillUsage[0].count, 3);
+    assert.equal(s.skillUsage[1].name, "review-pr");
+    assert.equal(s.skillUsage[1].count, 1);
+  });
+
+  it("returns empty skillUsage when no Skill events", () => {
+    const events = [
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { tool_name: "Read", tool_use_id: "t1" } },
+      { event: "PostToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Read", tool_use_id: "t1" } },
+    ];
+    const s = buildSummary(events);
+    assert.deepEqual(s.skillUsage, []);
+  });
+
+  it('uses "unknown" when tool_input_summary is missing for Skill', () => {
+    const events = [
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { tool_name: "Skill", tool_use_id: "sk1" } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.skillUsage.length, 1);
+    assert.equal(s.skillUsage[0].name, "unknown");
+    assert.equal(s.skillUsage[0].count, 1);
+  });
+
   it("handles mixed events (complete + orphan + interrupt) correctly", () => {
     const events = [
       { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z", cwd: "/project" },
@@ -274,7 +323,98 @@ describe("buildSummary", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. HTTP endpoint tests
+// 4. isBuiltinCommand tests
+// ---------------------------------------------------------------------------
+describe("isBuiltinCommand", () => {
+  it("recognizes /help as built-in", () => {
+    assert.equal(isBuiltinCommand("/help"), true);
+  });
+
+  it("recognizes /clear as built-in", () => {
+    assert.equal(isBuiltinCommand("/clear"), true);
+  });
+
+  it("recognizes /compact with arguments as built-in", () => {
+    assert.equal(isBuiltinCommand("/compact some args"), true);
+  });
+
+  it("is case-insensitive", () => {
+    assert.equal(isBuiltinCommand("/HELP"), true);
+    assert.equal(isBuiltinCommand("/Help"), true);
+  });
+
+  it("does not match custom slash commands", () => {
+    assert.equal(isBuiltinCommand("/git-worktree"), false);
+    assert.equal(isBuiltinCommand("/smart-commit"), false);
+    assert.equal(isBuiltinCommand("/devstefancho:test-commit-push-pr-clean"), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. buildSummary – UserPromptSubmit slash command counting
+// ---------------------------------------------------------------------------
+describe("buildSummary – slash command counting", () => {
+  it("counts UserPromptSubmit slash commands in skillUsage", () => {
+    const events = [
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { prompt: "/git-worktree create feat/x" } },
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { prompt: "/git-worktree list" } },
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { prompt: "/smart-commit" } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.skillUsage.length, 2);
+    const gitWorktree = s.skillUsage.find(x => x.name === "git-worktree");
+    const smartCommit = s.skillUsage.find(x => x.name === "smart-commit");
+    assert.equal(gitWorktree.count, 2);
+    assert.equal(smartCommit.count, 1);
+  });
+
+  it("combines PreToolUse Skill and UserPromptSubmit for the same skill name", () => {
+    const events = [
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { tool_name: "Skill", tool_use_id: "sk1", tool_input_summary: "commit" } },
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { prompt: "/commit" } },
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { prompt: "/commit -m fix" } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.skillUsage.length, 1);
+    assert.equal(s.skillUsage[0].name, "commit");
+    assert.equal(s.skillUsage[0].count, 3);
+  });
+
+  it("excludes built-in commands like /help from skillUsage", () => {
+    const events = [
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { prompt: "/help" } },
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { prompt: "/clear" } },
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { prompt: "/compact" } },
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:03Z", data: { prompt: "/git-worktree list" } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.skillUsage.length, 1);
+    assert.equal(s.skillUsage[0].name, "git-worktree");
+  });
+
+  it("ignores UserPromptSubmit with non-slash prompts", () => {
+    const events = [
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { prompt: "please fix the bug" } },
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { prompt: "" } },
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: {} },
+    ];
+    const s = buildSummary(events);
+    assert.deepEqual(s.skillUsage, []);
+  });
+
+  it("handles namespaced slash commands like /devstefancho:test-commit-push-pr-clean", () => {
+    const events = [
+      { event: "UserPromptSubmit", session_id: "s1", ts: "2024-01-01T00:00:00Z", data: { prompt: "/devstefancho:test-commit-push-pr-clean" } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.skillUsage.length, 1);
+    assert.equal(s.skillUsage[0].name, "devstefancho:test-commit-push-pr-clean");
+    assert.equal(s.skillUsage[0].count, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. HTTP endpoint tests
 // ---------------------------------------------------------------------------
 describe("HTTP endpoints", () => {
   let tmpDir;
@@ -332,13 +472,14 @@ describe("HTTP endpoints", () => {
     assert.ok(body.error);
   });
 
-  it("GET /api/summary returns 200 with summary object", async () => {
+  it("GET /api/summary returns 200 with summary object including skillUsage", async () => {
     const { status, body } = await fetchJson(baseUrl, "/api/summary");
     assert.equal(status, 200);
     assert.equal(body.totalEvents, 4);
     assert.equal(body.sessionCount, 1);
     assert.ok(Array.isArray(body.sessions));
     assert.ok(Array.isArray(body.toolUsage));
+    assert.ok(Array.isArray(body.skillUsage));
   });
 
   it("GET /api/summary?file=invalid returns 400 error", async () => {
