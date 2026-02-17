@@ -297,6 +297,50 @@ describe('PreToolUse - WebSearch', () => {
   });
 });
 
+// ─── PreToolUse: Skill ─────────────────────────────────────────────────────
+
+describe('PreToolUse - Skill', () => {
+  it('captures skill name', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Skill',
+      tool_use_id: 'tu-skill1',
+      tool_input: { skill: 'commit' },
+    });
+    assert.equal(result.logLines[0].data.tool_input_summary, 'commit');
+  });
+
+  it('captures skill name with args', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Skill',
+      tool_use_id: 'tu-skill2',
+      tool_input: { skill: 'review-pr', args: '123' },
+    });
+    assert.equal(result.logLines[0].data.tool_input_summary, 'review-pr');
+  });
+
+  it('missing skill field yields empty string', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Skill',
+      tool_use_id: 'tu-skill3',
+      tool_input: {},
+    });
+    assert.equal(result.logLines[0].data.tool_input_summary, '');
+  });
+
+  it('empty tool_input yields empty string', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Skill',
+      tool_use_id: 'tu-skill4',
+      tool_input: {},
+    });
+    assert.equal(result.logLines[0].data.tool_input_summary, '');
+  });
+});
+
 // ─── PreToolUse: Unknown tool ───────────────────────────────────────────────
 
 describe('PreToolUse - unknown tool', () => {

@@ -81,6 +81,9 @@ case "$EVENT" in
             WebSearch)
                 SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.query // empty')
                 ;;
+            Skill)
+                SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.skill // empty')
+                ;;
             *)
                 SUMMARY=$(echo "$INPUT" | jq -r '.tool_input | tostring' 2>/dev/null | head -c 200)
                 ;;
