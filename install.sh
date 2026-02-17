@@ -77,9 +77,13 @@ node "$SCRIPT_DIR/lib/settings-merge.mjs" install \
   --settings "$SETTINGS"
 
 echo ""
+
 echo -e "${GREEN}=== Installation complete ===${NC}"
 echo ""
 echo "Usage:"
 echo "  View dashboard:  ~/.claude/hooks/log-viewer.sh --open"
 echo "  Analyze logs:    ~/.claude/hooks/analyze-interrupts.sh"
 echo "  Uninstall:       $SCRIPT_DIR/uninstall.sh"
+echo ""
+echo "(Optional) Add alias for quick access:"
+echo "  echo 'alias hooklog=\"\$HOME/.claude/hooks/log-viewer.sh\"' >> ~/.zshrc && source ~/.zshrc"
