@@ -193,15 +193,17 @@ describe("buildSummary", () => {
     assert.equal(s.sessions[0].eventCount, 4);
   });
 
-  it("detects live session (SessionStart without SessionEnd)", () => {
+  it("detects live session (SessionStart without SessionEnd, recent activity)", () => {
+    const recentTs = new Date(Date.now() - 2 * 60 * 1000).toISOString(); // 2 min ago
     const events: LogEvent[] = [
-      { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z" },
-      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Bash", tool_use_id: "t1" } },
-      { event: "PostToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Bash", tool_use_id: "t1" } },
+      { event: "SessionStart", session_id: "s1", ts: recentTs },
+      { event: "PreToolUse", session_id: "s1", ts: recentTs, data: { tool_name: "Bash", tool_use_id: "t1" } },
+      { event: "PostToolUse", session_id: "s1", ts: recentTs, data: { tool_name: "Bash", tool_use_id: "t1" } },
     ];
     const s = buildSummary(events);
     assert.equal(s.liveSessionCount, 1);
     assert.equal(s.sessions[0].isLive, true);
+    assert.equal(s.sessions[0].isStale, false);
   });
 
   it("counts multiple sessions correctly", () => {
@@ -347,12 +349,13 @@ describe("buildSummary", () => {
   });
 
   it("handles mixed events (complete + orphan + interrupt) correctly", () => {
+    const recentTs = (offset: number) => new Date(Date.now() - offset).toISOString();
     const events: LogEvent[] = [
-      { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z", cwd: "/project" },
-      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Read", tool_use_id: "t1" } },
-      { event: "PostToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Read", tool_use_id: "t1" } },
-      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:03Z", data: { tool_name: "Bash", tool_use_id: "orphan1" } },
-      { event: "Stop", session_id: "s1", ts: "2024-01-01T00:00:04Z", data: { stop_hook_active: true } },
+      { event: "SessionStart", session_id: "s1", ts: recentTs(60000), cwd: "/project" },
+      { event: "PreToolUse", session_id: "s1", ts: recentTs(50000), data: { tool_name: "Read", tool_use_id: "t1" } },
+      { event: "PostToolUse", session_id: "s1", ts: recentTs(40000), data: { tool_name: "Read", tool_use_id: "t1" } },
+      { event: "PreToolUse", session_id: "s1", ts: recentTs(30000), data: { tool_name: "Bash", tool_use_id: "orphan1" } },
+      { event: "Stop", session_id: "s1", ts: recentTs(20000), data: { stop_hook_active: true } },
     ];
     const s = buildSummary(events);
     assert.equal(s.totalEvents, 5);
@@ -364,6 +367,35 @@ describe("buildSummary", () => {
     assert.equal(s.sessions[0].orphanCount, 1);
     assert.equal(s.sessions[0].hasInterrupt, true);
     assert.equal(s.sessions[0].isLive, true);
+  });
+
+  it("marks session as stale when inactive for 5+ minutes", () => {
+    const oldTs = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10 min ago
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: oldTs },
+      { event: "PreToolUse", session_id: "s1", ts: oldTs, data: { tool_name: "Read", tool_use_id: "t1" } },
+      { event: "PostToolUse", session_id: "s1", ts: oldTs, data: { tool_name: "Read", tool_use_id: "t1" } },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.sessions[0].isLive, false);
+    assert.equal(s.sessions[0].isStale, true);
+    assert.equal(s.liveSessionCount, 0);
+    assert.equal(s.staleSessionCount, 1);
+  });
+
+  it("completed sessions are neither live nor stale", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z" },
+      { event: "SessionEnd", session_id: "s1", ts: "2024-01-01T00:00:01Z" },
+    ];
+    const s = buildSummary(events);
+    assert.equal(s.sessions[0].isLive, false);
+    assert.equal(s.sessions[0].isStale, false);
+  });
+
+  it("zeroed summary includes staleSessionCount", () => {
+    const s = buildSummary([]);
+    assert.equal(s.staleSessionCount, 0);
   });
 });
 

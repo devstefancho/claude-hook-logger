@@ -50,6 +50,7 @@ export interface SessionInfo {
   hasSessionStart: boolean;
   hasSessionEnd: boolean;
   isLive: boolean;
+  isStale: boolean;
 }
 
 export interface ToolUsageEntry {
@@ -61,6 +62,7 @@ export interface Summary {
   totalEvents: number;
   sessionCount: number;
   liveSessionCount: number;
+  staleSessionCount: number;
   toolCount: number;
   interruptCount: number;
   orphanCount: number;
@@ -124,6 +126,7 @@ export function buildSummary(events: LogEvent[]): Summary {
         hasSessionStart: false,
         hasSessionEnd: false,
         isLive: false,
+        isStale: false,
       });
     }
     const sess = sessions.get(sid)!;
@@ -168,8 +171,18 @@ export function buildSummary(events: LogEvent[]): Summary {
     }
   }
 
+  const LIVE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+  const now = Date.now();
   for (const sess of sessions.values()) {
-    sess.isLive = sess.hasSessionStart && !sess.hasSessionEnd;
+    const hasNoEnd = sess.hasSessionStart && !sess.hasSessionEnd;
+    if (hasNoEnd) {
+      const elapsed = now - new Date(sess.lastTs).getTime();
+      sess.isLive = elapsed <= LIVE_THRESHOLD_MS;
+      sess.isStale = elapsed > LIVE_THRESHOLD_MS;
+    } else {
+      sess.isLive = false;
+      sess.isStale = false;
+    }
   }
 
   const orphanIds = new Set<string>();
@@ -196,6 +209,7 @@ export function buildSummary(events: LogEvent[]): Summary {
     totalEvents,
     sessionCount: sessions.size,
     liveSessionCount: [...sessions.values()].filter(s => s.isLive).length,
+    staleSessionCount: [...sessions.values()].filter(s => s.isStale).length,
     toolCount: toolUsage.length,
     interruptCount: interrupts.length,
     orphanCount: orphanIds.size,
