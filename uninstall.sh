@@ -60,7 +60,7 @@ if [[ -d "$VIEWER_DIR" ]]; then
 fi
 
 echo ""
-echo -e "${YELLOW}Note: ~/.claude/logs/ preserved (your log data)${NC}"
+echo -e "${YELLOW}Note: ~/.claude/hook-logger/ preserved (your log data)${NC}"
 echo -e "${YELLOW}Note: If you added the 'hooklog' alias, remove it manually from your shell config.${NC}"
 echo ""
 echo -e "${GREEN}=== Uninstall complete ===${NC}"

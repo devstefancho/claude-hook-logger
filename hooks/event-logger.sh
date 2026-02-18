@@ -3,7 +3,7 @@
 # Reads JSON from stdin, extracts event-specific fields, appends JSONL to log file.
 # Used by all hook events via settings.json registration.
 
-LOG_DIR="$HOME/.claude/logs"
+LOG_DIR="$HOME/.claude/hook-logger"
 LOG_FILE="$LOG_DIR/hook-events.jsonl"
 
 # Ensure log directory exists

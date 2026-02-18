@@ -8,7 +8,7 @@
 #   analyze-interrupts.sh --orphans [logfile]         # Show orphan tool calls
 #   analyze-interrupts.sh --sessions [logfile]        # Session summary table
 
-LOG_FILE="${2:-$HOME/.claude/logs/hook-events.jsonl}"
+LOG_FILE="${2:-$HOME/.claude/hook-logger/hook-events.jsonl}"
 MODE="${1:---summary}"
 
 # If first arg is a file path, treat as default summary for that file
