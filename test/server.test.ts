@@ -1,4 +1,4 @@
-import { describe, it, before, after, beforeEach, afterEach } from "node:test";
+import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -9,7 +9,6 @@ import {
   parseLogFile,
   getLogFiles,
   buildSummary,
-  createServer,
 } from "../viewer/server.js";
 import type { LogEvent } from "../viewer/server.js";
 import {
@@ -497,7 +496,6 @@ describe("HTTP endpoints", () => {
   let tmpDir: string;
   let htmlPath: string;
   let server: import("node:http").Server;
-  let port: number;
   let baseUrl: string;
 
   before(async () => {
@@ -512,7 +510,7 @@ describe("HTTP endpoints", () => {
     ];
     writeJsonl(tmpDir, "hook-events.jsonl", events);
 
-    ({ server, port, baseUrl } = await startServer(tmpDir, htmlPath));
+    ({ server, baseUrl } = await startServer(tmpDir, htmlPath));
   });
 
   after(async () => {
@@ -580,5 +578,108 @@ describe("HTTP endpoints", () => {
     const { status, body } = await fetchJson(baseUrl, "/nonexistent");
     assert.equal(status, 404);
     assert.ok(body.error);
+  });
+
+  it("OPTIONS request returns CORS preflight headers", async () => {
+    const res = await fetch(`${baseUrl}/api/files`, { method: "OPTIONS" });
+    assert.equal(res.status, 204);
+    assert.equal(res.headers.get("access-control-allow-origin"), "*");
+    assert.ok(res.headers.get("access-control-allow-methods")!.includes("POST"));
+    assert.ok(res.headers.get("access-control-allow-headers")!.includes("Content-Type"));
+  });
+
+  it("POST /api/chat with invalid JSON returns error", async () => {
+    const res = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "not json",
+    });
+    const text = await res.text();
+    assert.ok(text.includes("Invalid JSON body"));
+  });
+
+  it("POST /api/chat with missing message returns 400", async () => {
+    const res = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notMessage: "hello" }),
+    });
+    const text = await res.text();
+    assert.ok(text.includes("message is required"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. HTTP endpoint tests – webDir serving
+// ---------------------------------------------------------------------------
+describe("HTTP endpoints – webDir serving", () => {
+  let tmpDir: string;
+  let htmlPath: string;
+  let webDir: string;
+  let server: import("node:http").Server;
+  let baseUrl: string;
+
+  before(async () => {
+    tmpDir = makeTmpDir();
+    htmlPath = writeTmpHtml(tmpDir);
+
+    // Create webDir with index.html and asset files
+    webDir = path.join(tmpDir, "web");
+    fs.mkdirSync(webDir, { recursive: true });
+    fs.mkdirSync(path.join(webDir, "assets"), { recursive: true });
+    fs.writeFileSync(path.join(webDir, "index.html"), "<html><body>React App</body></html>");
+    fs.writeFileSync(path.join(webDir, "assets", "index.js"), "console.log('app')");
+    fs.writeFileSync(path.join(webDir, "assets", "style.css"), "body { color: red }");
+    fs.writeFileSync(path.join(webDir, "favicon.svg"), "<svg></svg>");
+
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z" },
+    ];
+    writeJsonl(tmpDir, "hook-events.jsonl", events);
+
+    ({ server, baseUrl } = await startServer(tmpDir, htmlPath, webDir));
+  });
+
+  after(async () => {
+    await stopServer(server);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("GET / serves React index.html from webDir", async () => {
+    const { status, text } = await fetchRaw(baseUrl, "/");
+    assert.equal(status, 200);
+    assert.ok(text.includes("React App"));
+  });
+
+  it("GET /assets/index.js serves JavaScript with correct content-type", async () => {
+    const res = await fetch(`${baseUrl}/assets/index.js`);
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get("content-type")!.includes("javascript"));
+    const text = await res.text();
+    assert.ok(text.includes("console.log"));
+  });
+
+  it("GET /assets/style.css serves CSS with correct content-type", async () => {
+    const res = await fetch(`${baseUrl}/assets/style.css`);
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get("content-type")!.includes("text/css"));
+  });
+
+  it("GET /favicon.svg serves SVG with correct content-type", async () => {
+    const res = await fetch(`${baseUrl}/favicon.svg`);
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get("content-type")!.includes("svg"));
+  });
+
+  it("GET /some-spa-route serves index.html (SPA fallback)", async () => {
+    const { status, text } = await fetchRaw(baseUrl, "/some-deep/route");
+    assert.equal(status, 200);
+    assert.ok(text.includes("React App"));
+  });
+
+  it("API endpoints still work with webDir", async () => {
+    const { status, body } = await fetchJson(baseUrl, "/api/files");
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(body.files));
   });
 });

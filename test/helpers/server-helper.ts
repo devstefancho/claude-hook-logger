@@ -20,9 +20,9 @@ export interface RawResponse {
   text: string;
 }
 
-export function startServer(logDir: string, htmlPath: string): Promise<ServerInstance> {
+export function startServer(logDir: string, htmlPath: string, webDir?: string): Promise<ServerInstance> {
   return new Promise((resolve, reject) => {
-    const server = createServer(logDir, htmlPath);
+    const server = createServer(logDir, htmlPath, webDir);
     server.listen(0, () => {
       const port = (server.address() as AddressInfo).port;
       const baseUrl = `http://localhost:${port}`;
