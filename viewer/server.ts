@@ -1,224 +1,35 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { query as sdkQuery } from "@anthropic-ai/claude-agent-sdk";
 
-const BUILTIN_COMMANDS = new Set([
-  // Official docs (code.claude.com/docs/en/interactive-mode)
-  "/clear", "/compact", "/config", "/context", "/copy", "/cost",
-  "/debug", "/desktop", "/doctor", "/exit", "/export", "/help",
-  "/init", "/mcp", "/memory", "/model", "/permissions", "/plan",
-  "/rename", "/resume", "/rewind", "/stats", "/status", "/statusline",
-  "/tasks", "/teleport", "/theme", "/todos", "/usage",
-  // Additional built-in commands
-  "/add-dir", "/agents", "/bug", "/hooks", "/ide",
-  "/install-github-app", "/login", "/logout", "/output-style",
-  "/plugin", "/pr-comments", "/privacy-settings", "/release-notes",
-  "/remote-env", "/review", "/sandbox", "/security-review",
-  "/terminal-setup", "/vim", "/fast", "/slow", "/listen",
-]);
+// Re-export everything from data.ts for backward compatibility
+export {
+  isBuiltinCommand,
+  parseLogFile,
+  isValidFilename,
+  getLogFiles,
+  buildSummary,
+  buildChatContext,
+  buildMinimalContext,
+  filterEventsByTime,
+  getSessionEvents,
+  buildSessionDetail,
+} from "./data.js";
+export type { LogEvent, SessionInfo, ToolUsageEntry, Summary } from "./data.js";
 
-export function isBuiltinCommand(prompt: string): boolean {
-  const cmd = prompt.split(/\s/)[0].toLowerCase();
-  return BUILTIN_COMMANDS.has(cmd);
-}
+import {
+  parseLogFile,
+  isValidFilename,
+  getLogFiles,
+  buildSummary,
+  buildMinimalContext,
+} from "./data.js";
+import type { Summary } from "./data.js";
+import { createHookLoggerMcpServer } from "./mcp-tools.js";
 
-export interface LogEvent {
-  event: string;
-  session_id?: string;
-  ts: string;
-  cwd?: string;
-  permission_mode?: string;
-  data?: {
-    tool_name?: string;
-    tool_use_id?: string;
-    tool_input_summary?: string;
-    stop_hook_active?: boolean;
-    prompt?: string;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
-
-export interface SessionInfo {
-  id: string;
-  cwd: string;
-  eventCount: number;
-  firstTs: string;
-  lastTs: string;
-  hasInterrupt: boolean;
-  orphanCount: number;
-  hasSessionStart: boolean;
-  hasSessionEnd: boolean;
-  isLive: boolean;
-  isStale: boolean;
-}
-
-export interface ToolUsageEntry {
-  name: string;
-  count: number;
-}
-
-export interface Summary {
-  totalEvents: number;
-  sessionCount: number;
-  liveSessionCount: number;
-  staleSessionCount: number;
-  toolCount: number;
-  interruptCount: number;
-  orphanCount: number;
-  sessions: SessionInfo[];
-  toolUsage: ToolUsageEntry[];
-  skillUsage: ToolUsageEntry[];
-  orphanIds: string[];
-}
-
-export function parseLogFile(logDir: string, filename: string): LogEvent[] {
-  const filePath = path.join(logDir, filename);
-  if (!fs.existsSync(filePath)) return [];
-  const content = fs.readFileSync(filePath, "utf-8");
-  const events: LogEvent[] = [];
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      events.push(JSON.parse(trimmed) as LogEvent);
-    } catch {
-      // skip malformed lines
-    }
-  }
-  return events;
-}
-
-export function isValidFilename(file: string | null | undefined): boolean {
-  if (!file || file.includes("..") || file.includes("/") || file.includes("\\")) return false;
-  return /^hook-events[\w.-]*\.jsonl$/.test(file);
-}
-
-export function getLogFiles(logDir: string): string[] {
-  if (!fs.existsSync(logDir)) return [];
-  return fs
-    .readdirSync(logDir)
-    .filter((f) => /^hook-events.*\.jsonl$/.test(f))
-    .sort()
-    .reverse();
-}
-
-export function buildSummary(events: LogEvent[]): Summary {
-  const sessions = new Map<string, SessionInfo>();
-  const toolCounts = new Map<string, number>();
-  const skillCounts = new Map<string, number>();
-  const preToolIds = new Set<string>();
-  const postToolIds = new Set<string>();
-  const interrupts: LogEvent[] = [];
-  const totalEvents = events.length;
-
-  for (const ev of events) {
-    const sid = ev.session_id || "unknown";
-    if (!sessions.has(sid)) {
-      sessions.set(sid, {
-        id: sid,
-        cwd: (ev.cwd as string) || "",
-        eventCount: 0,
-        firstTs: ev.ts,
-        lastTs: ev.ts,
-        hasInterrupt: false,
-        orphanCount: 0,
-        hasSessionStart: false,
-        hasSessionEnd: false,
-        isLive: false,
-        isStale: false,
-      });
-    }
-    const sess = sessions.get(sid)!;
-    sess.eventCount++;
-    if (ev.ts < sess.firstTs) sess.firstTs = ev.ts;
-    if (ev.ts > sess.lastTs) sess.lastTs = ev.ts;
-
-    const toolName = ev.data?.tool_name;
-    const toolUseId = ev.data?.tool_use_id;
-
-    if (toolName) {
-      toolCounts.set(toolName, (toolCounts.get(toolName) || 0) + 1);
-    }
-
-    if (ev.event === "PreToolUse" && toolName === "Skill") {
-      const skillName = ev.data?.tool_input_summary || "unknown";
-      skillCounts.set(skillName, (skillCounts.get(skillName) || 0) + 1);
-    }
-
-    // UserPromptSubmit에서 slash command 감지 (유저가 직접 호출한 경우)
-    if (ev.event === "UserPromptSubmit") {
-      const prompt = (ev.data?.prompt || "").trim();
-      if (prompt.startsWith("/") && !isBuiltinCommand(prompt)) {
-        const skillName = prompt.split(/\s/)[0].slice(1); // "/" 제거
-        skillCounts.set(skillName, (skillCounts.get(skillName) || 0) + 1);
-      }
-    }
-
-    if (ev.event === "PreToolUse" && toolUseId) {
-      preToolIds.add(toolUseId);
-    }
-    if ((ev.event === "PostToolUse" || ev.event === "PostToolUseFailure") && toolUseId) {
-      postToolIds.add(toolUseId);
-    }
-
-    if (ev.event === "SessionStart") sess.hasSessionStart = true;
-    if (ev.event === "SessionEnd") sess.hasSessionEnd = true;
-
-    if (ev.event === "Stop" && ev.data?.stop_hook_active) {
-      sess.hasInterrupt = true;
-      interrupts.push(ev);
-    }
-  }
-
-  const LIVE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
-  const now = Date.now();
-  for (const sess of sessions.values()) {
-    const hasNoEnd = sess.hasSessionStart && !sess.hasSessionEnd;
-    if (hasNoEnd) {
-      const elapsed = now - new Date(sess.lastTs).getTime();
-      sess.isLive = elapsed <= LIVE_THRESHOLD_MS;
-      sess.isStale = elapsed > LIVE_THRESHOLD_MS;
-    } else {
-      sess.isLive = false;
-      sess.isStale = false;
-    }
-  }
-
-  const orphanIds = new Set<string>();
-  for (const id of preToolIds) {
-    if (!postToolIds.has(id)) orphanIds.add(id);
-  }
-
-  for (const ev of events) {
-    if (ev.event === "PreToolUse" && ev.data?.tool_use_id && orphanIds.has(ev.data.tool_use_id)) {
-      const sess = sessions.get(ev.session_id || "unknown");
-      if (sess) sess.orphanCount++;
-    }
-  }
-
-  const toolUsage: ToolUsageEntry[] = [...toolCounts.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
-
-  const skillUsage = [...skillCounts.entries()]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
-
-  return {
-    totalEvents,
-    sessionCount: sessions.size,
-    liveSessionCount: [...sessions.values()].filter(s => s.isLive).length,
-    staleSessionCount: [...sessions.values()].filter(s => s.isStale).length,
-    toolCount: toolUsage.length,
-    interruptCount: interrupts.length,
-    orphanCount: orphanIds.size,
-    sessions: [...sessions.values()].sort((a, b) => (b.lastTs > a.lastTs ? 1 : -1)),
-    toolUsage,
-    skillUsage,
-    orphanIds: [...orphanIds],
-  };
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type QueryFn = typeof sdkQuery;
 
 function sendJson(res: http.ServerResponse, data: unknown, status = 200): void {
   const body = JSON.stringify(data);
@@ -230,21 +41,165 @@ function sendJson(res: http.ServerResponse, data: unknown, status = 200): void {
   res.end(body);
 }
 
-export function createServer(logDir: string, htmlPath: string): http.Server {
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js":   "application/javascript; charset=utf-8",
+  ".css":  "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg":  "image/svg+xml",
+  ".png":  "image/png",
+  ".ico":  "image/x-icon",
+};
+
+function serveStaticFile(res: http.ServerResponse, filePath: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  const ext = path.extname(filePath);
+  const contentType = MIME_TYPES[ext] || "application/octet-stream";
+  const content = fs.readFileSync(filePath);
+  res.writeHead(200, { "Content-Type": contentType, "Cache-Control": "no-cache" });
+  res.end(content);
+  return true;
+}
+
+export function handleChat(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  logDir: string,
+  mcpServer: ReturnType<typeof createHookLoggerMcpServer>,
+  queryFn: QueryFn = sdkQuery,
+): void {
+  let body = "";
+  req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+  req.on("end", async () => {
+    let message: string;
+    try {
+      const parsed = JSON.parse(body);
+      message = parsed.message;
+    } catch {
+      sendJson(res, { error: "Invalid JSON body" }, 400);
+      return;
+    }
+
+    if (!message) {
+      sendJson(res, { error: "message is required" }, 400);
+      return;
+    }
+
+    // Build minimal system prompt context with quick stats
+    const events = parseLogFile(logDir, "hook-events.jsonl");
+    const summary = buildSummary(events);
+    const contextAppend = buildMinimalContext(summary);
+
+    // Set up SSE headers
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+    });
+
+    // Filter env vars that trigger nested session detection
+    const BLOCKED_ENV = new Set(["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"]);
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (!BLOCKED_ENV.has(key) && value !== undefined) {
+        env[key] = value;
+      }
+    }
+
+    const abortController = new AbortController();
+    res.on("close", () => {
+      abortController.abort();
+    });
+
+    try {
+      const conversation = queryFn({
+        prompt: message,
+        options: {
+          systemPrompt: {
+            type: "preset",
+            preset: "claude_code",
+            append: contextAppend,
+          },
+          abortController,
+          maxTurns: 3,
+          allowedTools: [
+            "mcp__hook-logger__get_dashboard_summary",
+            "mcp__hook-logger__list_sessions",
+            "mcp__hook-logger__get_session_detail",
+            "mcp__hook-logger__get_recent_activity",
+            "mcp__hook-logger__get_tool_skill_usage",
+            "mcp__hook-logger__search_events",
+          ],
+          mcpServers: { "hook-logger": mcpServer },
+          permissionMode: "acceptEdits",
+          persistSession: false,
+          env,
+        },
+      });
+
+      let hasContent = false;
+      for await (const msg of conversation) {
+        if (msg.type === "assistant") {
+          const assistantMsg = msg as { message?: { content?: Array<{ type: string; text?: string; name?: string; input?: unknown }> } };
+          if (assistantMsg.message?.content) {
+            for (const block of assistantMsg.message.content) {
+              if (block.type === "text" && block.text) {
+                hasContent = true;
+                res.write(`data: ${JSON.stringify({ text: block.text })}\n\n`);
+              } else if (block.type === "tool_use" && block.name) {
+                // Send tool usage info to client (strip mcp__ prefix for display)
+                const toolName = block.name.replace(/^mcp__hook-logger__/, "");
+                res.write(`data: ${JSON.stringify({ tool_use: toolName })}\n\n`);
+              }
+            }
+          }
+        } else if (msg.type === "result") {
+          const resultMsg = msg as { subtype?: string; result?: string; errors?: string[] };
+          if (resultMsg.subtype === "success" && resultMsg.result && !hasContent) {
+            // Only send result text if assistant message didn't already provide it
+            hasContent = true;
+            res.write(`data: ${JSON.stringify({ text: resultMsg.result })}\n\n`);
+          } else if (resultMsg.subtype !== "success") {
+            const errText = resultMsg.errors?.join(", ") || "Unknown error";
+            res.write(`data: ${JSON.stringify({ text: `\nError (${resultMsg.subtype}): ${errText}` })}\n\n`);
+          }
+        }
+      }
+      if (!hasContent) {
+        res.write(`data: ${JSON.stringify({ text: "Error: No response received from Claude." })}\n\n`);
+      }
+    } catch (err) {
+      if (!abortController.signal.aborted) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        res.write(`data: ${JSON.stringify({ text: `\nError: ${errorMsg}` })}\n\n`);
+      }
+    }
+
+    res.write("data: [DONE]\n\n");
+    res.end();
+  });
+}
+
+export function createServer(logDir: string, htmlPath: string, webDir?: string, queryFn?: QueryFn): http.Server {
+  const mcpServer = createHookLoggerMcpServer(logDir);
+
   const server = http.createServer((req, res) => {
     const url = new URL(req.url!, `http://${req.headers.host || "localhost"}`);
     const pathname = url.pathname;
 
-    if (pathname === "/" || pathname === "/index.html") {
-      const html = fs.readFileSync(htmlPath, "utf-8");
-      res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-cache",
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
       });
-      res.end(html);
+      res.end();
       return;
     }
 
+    // API endpoints
     if (pathname === "/api/files") {
       return sendJson(res, { files: getLogFiles(logDir) });
     }
@@ -264,9 +219,41 @@ export function createServer(logDir: string, htmlPath: string): http.Server {
       return sendJson(res, summary);
     }
 
+    if (pathname === "/api/chat" && req.method === "POST") {
+      return handleChat(req, res, logDir, mcpServer, queryFn);
+    }
+
+    // Serve React build if webDir exists
+    if (webDir && fs.existsSync(webDir)) {
+      // Try exact file match for assets
+      if (pathname !== "/" && pathname !== "/index.html") {
+        const assetPath = path.join(webDir, pathname);
+        if (serveStaticFile(res, assetPath)) return;
+      }
+
+      // SPA fallback: serve index.html for all non-API routes
+      const indexPath = path.join(webDir, "index.html");
+      if (fs.existsSync(indexPath)) {
+        const html = fs.readFileSync(indexPath, "utf-8");
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+        res.end(html);
+        return;
+      }
+    }
+
+    // Fallback: serve legacy index.html
+    if (pathname === "/" || pathname === "/index.html") {
+      const html = fs.readFileSync(htmlPath, "utf-8");
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-cache",
+      });
+      res.end(html);
+      return;
+    }
+
     sendJson(res, { error: "Not found" }, 404);
   });
 
   return server;
 }
-

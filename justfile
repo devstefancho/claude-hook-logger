@@ -6,23 +6,23 @@ default:
 
 # --- Build ---
 
-# tsc 컴파일 → npm run build
+# tsc 컴파일 → pnpm run build
 build:
-    npm run build
+    pnpm run build
 
-# 타입 체크만 → npm run build:check
+# 타입 체크만 → pnpm run build:check
 build-check:
-    npm run build:check
+    pnpm run build:check
 
 # --- Test ---
 
-# 테스트 실행 → npm test (인자로 특정 파일 지정 가능)
+# 테스트 실행 → pnpm test (인자로 특정 파일 지정 가능)
 test *args:
-    npm test {{args}}
+    pnpm test {{args}}
 
-# 커버리지 포함 테스트 → npm run test:coverage
+# 커버리지 포함 테스트 → pnpm run test:coverage
 test-coverage:
-    npm run test:coverage
+    pnpm run test:coverage
 
 # --- Install / Uninstall ---
 
@@ -53,6 +53,12 @@ viewer-status:
 # 인터럽트 분석 → ./tools/analyze-interrupts.sh (인자 전달)
 analyze *args:
     ./tools/analyze-interrupts.sh {{args}}
+
+# --- Dev ---
+
+# 빌드 후 서버 시작 (Playwright 테스트용)
+dev: build
+    pnpm run dev:server
 
 # --- Utilities ---
 
