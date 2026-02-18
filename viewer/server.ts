@@ -98,11 +98,11 @@ export function handleChat(
       "Access-Control-Allow-Origin": "*",
     });
 
-    // Filter env vars that trigger nested session detection
-    const BLOCKED_ENV = new Set(["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"]);
+    // Only pass necessary env vars to Claude SDK (allowlist)
+    const ALLOWED_ENV = new Set(["PATH", "HOME", "USER", "LANG", "TZ", "SHELL", "TERM"]);
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {
-      if (!BLOCKED_ENV.has(key) && value !== undefined) {
+      if (ALLOWED_ENV.has(key) && value !== undefined) {
         env[key] = value;
       }
     }
