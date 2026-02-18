@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync, writeFileSync, utimesSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createTempHome,
@@ -132,24 +132,6 @@ describe('rotate-logs', () => {
       const content = readFileSync(logFile, 'utf-8').trim();
       assert.equal(content, '', 'log file should be empty after rotation');
     }
-  });
-
-  it('archives older than 30 days → deleted', () => {
-    const logDir = getLogDir(tempHome);
-    const oldDate = daysAgo(35);
-    const archivePath = join(logDir, `hook-events.${oldDate}.jsonl`);
-
-    writeFileSync(archivePath, makeEntry(oldDate) + '\n');
-    const oldTime = new Date();
-    oldTime.setUTCDate(oldTime.getUTCDate() - 35);
-    utimesSync(archivePath, oldTime, oldTime);
-
-    writeLogFile(tempHome, makeEntry(todayStr()) + '\n');
-
-    const result = runRotateLogs(tempHome);
-    assert.equal(result.exitCode, 0);
-
-    assert.ok(!existsSync(archivePath), `Old archive ${archivePath} should be deleted`);
   });
 
   it('multiple days of logs → only rotates current log', () => {

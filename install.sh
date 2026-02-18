@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 VIEWER_DIR="$HOOKS_DIR/log-viewer"
-LOGS_DIR="$CLAUDE_DIR/logs"
+LOGS_DIR="$CLAUDE_DIR/hook-logger"
 SETTINGS="$CLAUDE_DIR/settings.json"
 
 # Colors
