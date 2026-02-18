@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "./server.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_LOG_DIR = path.join(process.env.HOME || "", ".claude", "logs");
+const DEFAULT_LOG_DIR = path.join(process.env.HOME || "", ".claude", "hook-logger");
 const DEFAULT_PORT = 7777;
 
 const PORT = parseInt(process.argv[2] || String(DEFAULT_PORT), 10);
