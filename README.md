@@ -29,7 +29,7 @@ cd claude-hook-logger
 This will:
 1. Copy hook scripts to `~/.claude/hooks/`
 2. Merge event-logger hooks into `~/.claude/settings.json`
-3. Create `~/.claude/logs/` for JSONL log output
+3. Create `~/.claude/hook-logger/` for JSONL log output
 
 ## Usage
 
@@ -62,7 +62,7 @@ Opens the log viewer at `http://localhost:7777`. Use `--port NNNN` to change the
 
 ## Log Format
 
-Logs are written as JSONL (one JSON object per line) to `~/.claude/logs/hook-events.jsonl`.
+Logs are written as JSONL (one JSON object per line) to `~/.claude/hook-logger/hook-events.jsonl`.
 
 ```json
 {
@@ -104,7 +104,7 @@ install.sh
 Claude Code session
   └── triggers hooks on events
         └── event-logger.sh
-              └── appends JSONL → ~/.claude/logs/hook-events.jsonl
+              └── appends JSONL → ~/.claude/hook-logger/hook-events.jsonl
 
 log-viewer.sh → node server.mjs → web dashboard (localhost:7777)
 analyze-interrupts.sh → CLI summary / session timeline
@@ -117,7 +117,7 @@ cd claude-hook-logger
 ./uninstall.sh
 ```
 
-> **Note:** Logs are preserved in `~/.claude/logs/`. Delete them manually if no longer needed.
+> **Note:** Logs are preserved in `~/.claude/hook-logger/`. Delete them manually if no longer needed.
 
 ## Development
 

@@ -1,9 +1,8 @@
 #!/bin/bash
 # Log rotation for Claude Code hook events
 # Called on SessionStart. Rotates log if date has changed.
-# Deletes archives older than 30 days.
 
-LOG_DIR="$HOME/.claude/logs"
+LOG_DIR="$HOME/.claude/hook-logger"
 LOG_FILE="$LOG_DIR/hook-events.jsonl"
 
 # Nothing to rotate if log file doesn't exist or is empty
@@ -28,8 +27,5 @@ if [[ -n "$FIRST_DATE" && "$FIRST_DATE" != "$TODAY" ]]; then
     # Ensure current log is cleared (mv may have done this, but handle append case)
     [[ -f "$LOG_FILE" ]] && : > "$LOG_FILE"
 fi
-
-# Delete archives older than 30 days
-find "$LOG_DIR" -name "hook-events.*.jsonl" -type f -mtime +30 -delete 2>/dev/null
 
 exit 0
