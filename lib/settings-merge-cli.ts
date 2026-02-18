@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CLI entry point for settings-merge (install/uninstall hooks in settings.json)
 import path from "node:path";
-import { loadSettings, saveSettings, mergeHooks, removeHooks } from "./settings-merge.js";
+import { loadSettings, saveSettings, mergeHooks, removeHooksByConfig } from "./settings-merge.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -34,17 +34,20 @@ if (command === "install") {
     console.log("settings.json: hooks merged successfully.");
   }
 } else if (command === "uninstall") {
+  const configPath = getArg("--config");
   const settingsPath = getArg("--settings");
-  const pattern = getArg("--pattern");
 
-  if (!settingsPath || !pattern) {
-    console.error("Usage: node settings-merge-cli.js uninstall --settings <path> --pattern <regex>");
+  if (!configPath || !settingsPath) {
+    console.error("Usage: node settings-merge-cli.js uninstall --config <path> --settings <path>");
     process.exit(1);
   }
 
+  const resolvedConfig = path.resolve(configPath);
   const resolvedSettings = path.resolve(settingsPath);
+
+  const hooksConfig = loadSettings(resolvedConfig);
   const settings = loadSettings(resolvedSettings);
-  const cleaned = removeHooks(settings, pattern);
+  const cleaned = removeHooksByConfig(settings, hooksConfig);
 
   if (JSON.stringify(cleaned) === JSON.stringify(settings)) {
     console.log("settings.json: no matching hooks found, no changes needed.");

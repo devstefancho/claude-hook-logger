@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { loadSettings, saveSettings, mergeHooks, removeHooks } from '../lib/settings-merge.js';
+import { loadSettings, saveSettings, mergeHooks, removeHooksByConfig } from '../lib/settings-merge.js';
 import {
   fullHooksConfig,
   minimalHooksConfig,
@@ -15,7 +15,6 @@ import {
   settingsWithOtherHooks,
   settingsAlreadyRegistered,
   settingsWithV2Logger,
-  removePattern,
 } from './helpers/fixtures.js';
 
 let tmpDir: string;
@@ -291,18 +290,18 @@ describe('mergeHooks', () => {
   });
 });
 
-// ─── 3. removeHooks ─────────────────────────────────────────────────────────
+// ─── 3. removeHooksByConfig ──────────────────────────────────────────────────
 
-describe('removeHooks', () => {
+describe('removeHooksByConfig', () => {
   it('normal removal (fully registered → all event-logger entries removed)', () => {
     const merged = mergeHooks({}, fullHooksConfig);
-    const result = removeHooks(merged, removePattern);
+    const result = removeHooksByConfig(merged, fullHooksConfig);
     assert.equal(result.hooks, undefined);
   });
 
   it('not installed → no change', () => {
     const settings = { model: 'opus', hooks: { Stop: [{ hooks: [{ type: 'command', command: 'other.sh' }] }] } };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.deepStrictEqual(result.hooks, settings.hooks);
   });
 
@@ -320,7 +319,7 @@ describe('removeHooks', () => {
         ],
       },
     };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.equal(result.hooks!.Notification.length, 1);
     assert.equal(result.hooks!.Notification[0].hooks.length, 1);
     assert.equal(result.hooks!.Notification[0].hooks[0].command, '~/.claude/hooks/notification-hook.sh');
@@ -338,7 +337,7 @@ describe('removeHooks', () => {
         ],
       },
     };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.equal(result.hooks!.Stop, undefined);
     assert.ok(result.hooks!.SessionStart);
   });
@@ -351,18 +350,18 @@ describe('removeHooks', () => {
         ],
       },
     };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.equal(result.hooks, undefined);
   });
 
   it('idempotent (remove twice → same result)', () => {
     const merged = mergeHooks({}, fullHooksConfig);
-    const first = removeHooks(merged, removePattern);
-    const second = removeHooks(first, removePattern);
+    const first = removeHooksByConfig(merged, fullHooksConfig);
+    const second = removeHooksByConfig(first, fullHooksConfig);
     assert.deepStrictEqual(second, first);
   });
 
-  it('non-matching pattern (event-logger-v2.sh not removed by event-logger\\.sh)', () => {
+  it('exact command match (event-logger-v2.sh not removed by event-logger.sh config)', () => {
     const settings = {
       hooks: {
         Stop: [
@@ -370,7 +369,7 @@ describe('removeHooks', () => {
         ],
       },
     };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.ok(result.hooks);
     assert.ok(result.hooks!.Stop);
     assert.equal(result.hooks!.Stop[0].hooks[0].command, '~/.claude/hooks/event-logger-v2.sh');
@@ -378,7 +377,7 @@ describe('removeHooks', () => {
 
   it('no hooks in settings → no change', () => {
     const settings = { model: 'opus', env: { A: '1' } };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.deepStrictEqual(result, settings);
   });
 
@@ -391,12 +390,12 @@ describe('removeHooks', () => {
         ],
       },
     };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.equal(result.hooks!.Stop.length, 1);
     assert.equal(result.hooks!.Stop[0].matcher, 'some_pattern');
   });
 
-  it('hooks array with falsy entries → pattern filter handles gracefully', () => {
+  it('hooks array with falsy entries → handled gracefully', () => {
     const settings = {
       hooks: {
         Stop: [
@@ -404,13 +403,13 @@ describe('removeHooks', () => {
         ],
       },
     };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.equal(result.hooks!.Stop.length, 1);
     assert.equal(result.hooks!.Stop[0].hooks.length, 1);
     assert.equal(result.hooks!.Stop[0].hooks[0], null);
   });
 
-  it('hooks with non-command type → not matched by pattern', () => {
+  it('hooks with non-command type → not removed', () => {
     const settings = {
       hooks: {
         Stop: [
@@ -418,7 +417,7 @@ describe('removeHooks', () => {
         ],
       },
     };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.equal(result.hooks!.Stop.length, 1);
     assert.equal(result.hooks!.Stop[0].hooks[0].type, 'shell');
   });
@@ -430,9 +429,15 @@ describe('removeHooks', () => {
         SessionStart: [{ hooks: [{ type: 'command', command: '~/.claude/hooks/event-logger.sh' }] }],
       },
     };
-    const result = removeHooks(settings, removePattern);
+    const result = removeHooksByConfig(settings, fullHooksConfig);
     assert.equal(result.hooks!.Stop, 'not-an-array');
     assert.equal(result.hooks!.SessionStart, undefined);
+  });
+
+  it('empty hooksConfig → no change', () => {
+    const merged = mergeHooks({}, fullHooksConfig);
+    const result = removeHooksByConfig(merged, {});
+    assert.deepStrictEqual(result, merged);
   });
 });
 
@@ -518,7 +523,7 @@ describe('CLI integration', () => {
       encoding: 'utf-8',
     });
 
-    const result = execFileSync(tsxBin, [cliPath, 'uninstall', '--settings', settingsFile, '--pattern', removePattern], {
+    const result = execFileSync(tsxBin, [cliPath, 'uninstall', '--config', configPath, '--settings', settingsFile], {
       encoding: 'utf-8',
     });
     assert.ok(result.includes('hooks removed successfully'));
@@ -532,7 +537,7 @@ describe('CLI integration', () => {
     const settingsFile = path.join(tmpDir, 'settings.json');
     fs.writeFileSync(settingsFile, JSON.stringify({ model: 'opus' }), 'utf-8');
 
-    const result = execFileSync(tsxBin, [cliPath, 'uninstall', '--settings', settingsFile, '--pattern', removePattern], {
+    const result = execFileSync(tsxBin, [cliPath, 'uninstall', '--config', configPath, '--settings', settingsFile], {
       encoding: 'utf-8',
     });
     assert.ok(result.includes('no matching hooks found'));

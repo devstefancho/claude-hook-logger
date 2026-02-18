@@ -54,10 +54,6 @@ function hookMatchesCommand(hook: Hook, command: string): boolean {
   return hook && hook.type === "command" && hook.command === command;
 }
 
-function hookMatchesPattern(hook: Hook, pattern: RegExp): boolean {
-  return hook && hook.type === "command" && pattern.test(hook.command);
-}
-
 export function mergeHooks(settings: Settings, hooksConfig: HooksConfig): Settings {
   const result: Settings = { ...settings };
 
@@ -107,11 +103,23 @@ export function mergeHooks(settings: Settings, hooksConfig: HooksConfig): Settin
   return result;
 }
 
-export function removeHooks(settings: Settings, commandPattern: string): Settings {
+export function removeHooksByConfig(settings: Settings, hooksConfig: HooksConfig): Settings {
   const result: Settings = { ...settings };
-  const pattern = new RegExp(commandPattern);
 
-  if (!result.hooks) return result;
+  if (!hooksConfig?.hooks || !result.hooks) return result;
+
+  const commandsToRemove = new Set<string>();
+  for (const matcherGroups of Object.values(hooksConfig.hooks)) {
+    if (!Array.isArray(matcherGroups)) continue;
+    for (const group of matcherGroups) {
+      if (!Array.isArray(group.hooks)) continue;
+      for (const hook of group.hooks) {
+        if (hook.type === "command" && hook.command) {
+          commandsToRemove.add(hook.command);
+        }
+      }
+    }
+  }
 
   result.hooks = { ...result.hooks };
 
@@ -125,7 +133,7 @@ export function removeHooks(settings: Settings, commandPattern: string): Setting
         continue;
       }
 
-      const filteredHooks = group.hooks.filter(hook => !hookMatchesPattern(hook, pattern));
+      const filteredHooks = group.hooks.filter(hook => !(hook && hook.type === "command" && commandsToRemove.has(hook.command)));
 
       if (filteredHooks.length > 0) {
         newGroups.push({ ...group, hooks: filteredHooks });

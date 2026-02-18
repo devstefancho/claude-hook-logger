@@ -28,8 +28,8 @@ fi
 echo "Cleaning settings.json..."
 if [[ -f "$SETTINGS" ]]; then
   node "$SCRIPT_DIR/dist/lib/settings-merge-cli.js" uninstall \
-    --settings "$SETTINGS" \
-    --pattern "event-logger\\.sh"
+    --config "$SCRIPT_DIR/hooks-config.json" \
+    --settings "$SETTINGS"
 else
   echo "  No settings.json found, skipping."
 fi

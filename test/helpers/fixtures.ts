@@ -132,4 +132,3 @@ export const settingsWithV2Logger: Settings = {
   },
 };
 
-export const removePattern: string = "event-logger\\.sh";
