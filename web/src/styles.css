@@ -349,11 +349,11 @@ body {
 }
 .event-row .session-tag.clickable {
   cursor: pointer;
-  transition: color 0.15s;
+  transition: filter 0.15s;
+  padding: 1px 4px;
 }
 .event-row .session-tag.clickable:hover {
-  color: #58a6ff;
-  text-decoration: underline;
+  filter: brightness(1.3);
 }
 
 /* Badge Colors */
@@ -619,6 +619,114 @@ body {
 }
 .chat-send-btn:hover { background: #388bfd; }
 .chat-send-btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+
+/* Session Dot */
+.session-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+/* Session Search */
+.session-search {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-bottom: 1px solid #30363d;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.session-search .search-input {
+  width: auto;
+  flex: 1;
+  margin-left: 0;
+  font-size: 11px;
+  padding: 3px 6px;
+}
+.session-search .search-count {
+  font-size: 10px;
+  color: #484f58;
+  flex-shrink: 0;
+}
+
+/* View Toggle */
+.view-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.toggle-btn {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border: none;
+  background: #21262d;
+  color: #8b949e;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  transition: all 0.15s;
+}
+.toggle-btn:hover { color: #c9d1d9; }
+.toggle-btn.active { background: #1f6feb; color: #fff; }
+.toggle-btn + .toggle-btn { border-left: 1px solid #30363d; }
+
+/* Timeline Chart */
+.timeline-chart-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+.chart-controls {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #21262d;
+  align-items: center;
+  flex-shrink: 0;
+  background: #161b22ee;
+  backdrop-filter: blur(4px);
+}
+.chart-controls .filter-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  min-width: 28px;
+  text-align: center;
+}
+.chart-session-label {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 8px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chart-session-label:hover { text-decoration: underline; }
+.chart-tooltip {
+  position: absolute;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #8b949e;
+  pointer-events: none;
+  z-index: 50;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
 
 /* Responsive */
 @media (max-width: 900px) {
