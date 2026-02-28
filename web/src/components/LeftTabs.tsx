@@ -10,15 +10,17 @@ interface LeftTabsProps {
   summary: Summary;
   events: LogEvent[];
   onScrollToEvent: (idx: number) => void;
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
 }
 
-export function LeftTabs({ summary, events, onScrollToEvent }: LeftTabsProps) {
+export function LeftTabs({ summary, events, onScrollToEvent, maximized, onToggleMaximize }: LeftTabsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("tools");
   const orphanIds = new Set(summary.orphanIds || []);
 
   return (
     <div className="panel" style={{ flex: 1, minHeight: 0 }}>
-      <div className="tab-bar">
+      <div className="tab-bar" style={{ display: "flex", alignItems: "center" }}>
         {(["tools", "skills", "issues"] as Tab[]).map((tab) => (
           <button
             key={tab}
@@ -28,6 +30,16 @@ export function LeftTabs({ summary, events, onScrollToEvent }: LeftTabsProps) {
             {tab}
           </button>
         ))}
+        {onToggleMaximize && (
+          <button
+            className="panel-maximize-btn"
+            onClick={onToggleMaximize}
+            title={maximized ? "Restore" : "Maximize"}
+            style={{ marginLeft: "auto", marginRight: 8 }}
+          >
+            {maximized ? "\u25A3" : "\u25A1"}
+          </button>
+        )}
       </div>
       <div className="tab-content">
         {activeTab === "tools" && <ToolUsage tools={summary.toolUsage} />}

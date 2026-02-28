@@ -8,6 +8,9 @@ interface SessionListProps {
   selectedSession: string | null;
   onSelectSession: (sid: string) => void;
   onClearFilter: () => void;
+  height?: number;
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
 }
 
 function sortSessions(sessions: SessionInfo[]): SessionInfo[] {
@@ -30,6 +33,9 @@ export function SessionList({
   selectedSession,
   onSelectSession,
   onClearFilter,
+  height,
+  maximized,
+  onToggleMaximize,
 }: SessionListProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -48,19 +54,26 @@ export function SessionList({
   const sorted = sortSessions(filteredSessions);
 
   return (
-    <div className="panel" style={{ maxHeight: 200, flexShrink: 0 }}>
-      <div className="panel-title">
-        Sessions
-        {selectedSession && (
-          <span style={{ color: "#58a6ff", fontSize: 10, fontWeight: 400, marginLeft: 8 }}>
-            (filtered: {selectedSession.slice(0, 8)}){" "}
-            <span
-              style={{ cursor: "pointer", color: "#f85149" }}
-              onClick={onClearFilter}
-            >
-              &#10005;
+    <div className="panel" style={maximized ? { flex: 1, minHeight: 0 } : { height: height ?? 200, flexShrink: 0 }}>
+      <div className="panel-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span>
+          Sessions
+          {selectedSession && (
+            <span style={{ color: "#58a6ff", fontSize: 10, fontWeight: 400, marginLeft: 8 }}>
+              (filtered: {selectedSession.slice(0, 8)}){" "}
+              <span
+                style={{ cursor: "pointer", color: "#f85149" }}
+                onClick={onClearFilter}
+              >
+                &#10005;
+              </span>
             </span>
-          </span>
+          )}
+        </span>
+        {onToggleMaximize && (
+          <button className="panel-maximize-btn" onClick={onToggleMaximize} title={maximized ? "Restore" : "Maximize"}>
+            {maximized ? "\u25A3" : "\u25A1"}
+          </button>
         )}
       </div>
       <div className="session-search">

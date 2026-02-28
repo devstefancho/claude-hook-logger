@@ -11,6 +11,8 @@ interface EventTimelineProps {
   onFilterBySession: (sid: string) => void;
   onClearSessionFilter: () => void;
   highlightIdx: number | null;
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
 }
 
 export function EventTimeline({
@@ -20,6 +22,8 @@ export function EventTimeline({
   onFilterBySession,
   onClearSessionFilter,
   highlightIdx,
+  maximized,
+  onToggleMaximize,
 }: EventTimelineProps) {
   const [activeFilters, setActiveFilters] = useState<Set<string>>(
     () => new Set(Object.keys(EVENT_TYPES)),
@@ -76,19 +80,26 @@ export function EventTimeline({
     <div className="panel" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
       <div className="panel-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span>Event Timeline</span>
-        <div className="view-toggle">
-          <button
-            className={`toggle-btn${viewMode === "list" ? " active" : ""}`}
-            onClick={() => setViewMode("list")}
-          >
-            List
-          </button>
-          <button
-            className={`toggle-btn${viewMode === "chart" ? " active" : ""}`}
-            onClick={() => setViewMode("chart")}
-          >
-            Chart
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="view-toggle">
+            <button
+              className={`toggle-btn${viewMode === "list" ? " active" : ""}`}
+              onClick={() => setViewMode("list")}
+            >
+              List
+            </button>
+            <button
+              className={`toggle-btn${viewMode === "chart" ? " active" : ""}`}
+              onClick={() => setViewMode("chart")}
+            >
+              Chart
+            </button>
+          </div>
+          {onToggleMaximize && (
+            <button className="panel-maximize-btn" onClick={onToggleMaximize} title={maximized ? "Restore" : "Maximize"}>
+              {maximized ? "\u25A3" : "\u25A1"}
+            </button>
+          )}
         </div>
       </div>
       <div className="timeline-filters">

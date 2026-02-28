@@ -71,13 +71,13 @@ body {
 /* Main Layout */
 .main {
   display: flex;
-  gap: 16px;
+  gap: 0;
   padding: 12px 20px;
   height: calc(100vh - 90px);
   overflow: hidden;
 }
-.left { width: 40%; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
-.right { width: 60%; display: flex; flex-direction: column; overflow: hidden; }
+.left { display: flex; flex-direction: column; gap: 0; overflow: hidden; }
+.right { display: flex; flex-direction: column; overflow: hidden; }
 
 /* Panels */
 .panel {
@@ -728,10 +728,70 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
+/* Resize Handles */
+.resize-handle-vertical {
+  width: 16px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+.resize-handle-vertical::after {
+  content: "";
+  width: 4px;
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+.resize-handle-vertical:hover::after,
+.resize-handle-vertical:active::after {
+  background: #58a6ff40;
+}
+
+.resize-handle-horizontal {
+  height: 8px;
+  cursor: row-resize;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: stretch;
+}
+.resize-handle-horizontal::after {
+  content: "";
+  height: 4px;
+  width: 100%;
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+.resize-handle-horizontal:hover::after,
+.resize-handle-horizontal:active::after {
+  background: #58a6ff40;
+}
+
+/* Panel Maximize Button */
+.panel-maximize-btn {
+  font-family: inherit;
+  font-size: 12px;
+  background: none;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #8b949e;
+  cursor: pointer;
+  padding: 1px 6px;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.panel-maximize-btn:hover {
+  border-color: #58a6ff;
+  color: #c9d1d9;
+}
+
 /* Responsive */
 @media (max-width: 900px) {
-  .main { flex-direction: column; height: auto; }
-  .left, .right { width: 100%; }
+  .main { flex-direction: column; height: auto; gap: 8px; }
+  .left, .right { width: 100% !important; }
   body { overflow: auto; height: auto; }
   .chat-panel { width: 100%; }
+  .resize-handle-vertical,
+  .resize-handle-horizontal { display: none; }
 }
