@@ -1,11 +1,16 @@
+import { useState, useMemo } from "react";
 import type { SessionInfo } from "../types";
 import { formatRelativeTime } from "../utils/format";
+import { getSessionColor } from "../utils/sessionColor";
 
 interface SessionListProps {
   sessions: SessionInfo[];
   selectedSession: string | null;
   onSelectSession: (sid: string) => void;
   onClearFilter: () => void;
+  height?: number;
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
 }
 
 function sortSessions(sessions: SessionInfo[]): SessionInfo[] {
@@ -28,24 +33,58 @@ export function SessionList({
   selectedSession,
   onSelectSession,
   onClearFilter,
+  height,
+  maximized,
+  onToggleMaximize,
 }: SessionListProps) {
-  const sorted = sortSessions(sessions);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredSessions = useMemo(() => {
+    if (!searchQuery.trim()) return sessions;
+    const q = searchQuery.toLowerCase();
+    return sessions.filter((s) => {
+      return (
+        s.id.toLowerCase().includes(q) ||
+        s.cwd.toLowerCase().includes(q) ||
+        String(s.eventCount).includes(q)
+      );
+    });
+  }, [sessions, searchQuery]);
+
+  const sorted = sortSessions(filteredSessions);
 
   return (
-    <div className="panel" style={{ maxHeight: 200, flexShrink: 0 }}>
-      <div className="panel-title">
-        Sessions
-        {selectedSession && (
-          <span style={{ color: "#58a6ff", fontSize: 10, fontWeight: 400, marginLeft: 8 }}>
-            (filtered: {selectedSession.slice(0, 8)}){" "}
-            <span
-              style={{ cursor: "pointer", color: "#f85149" }}
-              onClick={onClearFilter}
-            >
-              &#10005;
+    <div className="panel" style={maximized ? { flex: 1, minHeight: 0 } : { height: height ?? 200, flexShrink: 0 }}>
+      <div className="panel-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span>
+          Sessions
+          {selectedSession && (
+            <span style={{ color: "#58a6ff", fontSize: 10, fontWeight: 400, marginLeft: 8 }}>
+              (filtered: {selectedSession.slice(0, 8)}){" "}
+              <span
+                style={{ cursor: "pointer", color: "#f85149" }}
+                onClick={onClearFilter}
+              >
+                &#10005;
+              </span>
             </span>
-          </span>
+          )}
+        </span>
+        {onToggleMaximize && (
+          <button className="panel-maximize-btn" onClick={onToggleMaximize} title={maximized ? "Restore" : "Maximize"}>
+            {maximized ? "\u25A3" : "\u25A1"}
+          </button>
         )}
+      </div>
+      <div className="session-search">
+        <input
+          className="search-input"
+          type="text"
+          placeholder="Search sessions..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <span className="search-count">{sorted.length}/{sessions.length}</span>
       </div>
       <div className="panel-body">
         {!sorted.length ? (
@@ -53,6 +92,7 @@ export function SessionList({
         ) : (
           sorted.map((s) => {
             const shortId = s.id.slice(0, 8);
+            const color = getSessionColor(s.id);
             const cls = [
               "session-card",
               selectedSession === s.id ? "selected" : "",
@@ -70,8 +110,10 @@ export function SessionList({
                 className={cls}
                 id={`sess-${shortId}`}
                 onClick={() => onSelectSession(s.id)}
+                style={{ borderLeftColor: color, borderLeftWidth: 3, borderLeftStyle: "solid" }}
               >
                 <div className="sid">
+                  <span className="session-dot" style={{ backgroundColor: color }} />
                   {shortId}
                   {s.isLive && <span className="live-badge" title="Active within last 5 min">LIVE</span>}
                   {s.isStale && <span className="stale-badge" title="No activity for 5+ min">STALE</span>}

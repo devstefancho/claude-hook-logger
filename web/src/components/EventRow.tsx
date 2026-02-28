@@ -1,6 +1,7 @@
 import type { LogEvent } from "../types";
 import { EVENT_TYPES } from "../utils/constants";
 import { formatRelativeTime, formatAbsTime, truncate } from "../utils/format";
+import { getSessionColor, getSessionColorBg } from "../utils/sessionColor";
 
 interface EventRowProps {
   event: LogEvent;
@@ -57,6 +58,8 @@ export function EventRow({
     .filter(Boolean)
     .join(" ");
   const shortSid = (ev.session_id || "").slice(0, 6);
+  const sessionColor = ev.session_id ? getSessionColor(ev.session_id) : undefined;
+  const sessionBg = ev.session_id ? getSessionColorBg(ev.session_id) : undefined;
 
   return (
     <div className={rowCls} id={`ev-${index}`}>
@@ -76,6 +79,7 @@ export function EventRow({
         className="session-tag clickable"
         onClick={() => onFilterBySession(ev.session_id || "")}
         title="Filter by this session"
+        style={sessionColor ? { background: sessionBg, color: sessionColor, borderRadius: 3 } : undefined}
       >
         {shortSid}
       </span>

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useMemo } from "react";
 import type { LogEvent, Summary } from "../types";
 import { EVENT_TYPES } from "../utils/constants";
 import { EventRow } from "./EventRow";
+import { TimelineChart } from "./TimelineChart";
 
 interface EventTimelineProps {
   events: LogEvent[];
@@ -10,6 +11,8 @@ interface EventTimelineProps {
   onFilterBySession: (sid: string) => void;
   onClearSessionFilter: () => void;
   highlightIdx: number | null;
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
 }
 
 export function EventTimeline({
@@ -19,11 +22,14 @@ export function EventTimeline({
   onFilterBySession,
   onClearSessionFilter,
   highlightIdx,
+  maximized,
+  onToggleMaximize,
 }: EventTimelineProps) {
   const [activeFilters, setActiveFilters] = useState<Set<string>>(
     () => new Set(Object.keys(EVENT_TYPES)),
   );
   const [searchText, setSearchText] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "chart">("list");
   const timelineRef = useRef<HTMLDivElement>(null);
 
   const orphanIds = useMemo(() => new Set(summary.orphanIds || []), [summary.orphanIds]);
@@ -42,9 +48,10 @@ export function EventTimeline({
           if (!haystack.includes(searchText.toLowerCase())) return false;
         }
         return true;
-      })
-      .reverse();
+      });
   }, [events, activeFilters, selectedSession, searchText]);
+
+  const filteredReversed = useMemo(() => [...filtered].reverse(), [filtered]);
 
   const toggleFilter = useCallback((type: string) => {
     setActiveFilters((prev) => {
@@ -71,7 +78,30 @@ export function EventTimeline({
 
   return (
     <div className="panel" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-      <div className="panel-title">Event Timeline</div>
+      <div className="panel-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span>Event Timeline</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="view-toggle">
+            <button
+              className={`toggle-btn${viewMode === "list" ? " active" : ""}`}
+              onClick={() => setViewMode("list")}
+            >
+              List
+            </button>
+            <button
+              className={`toggle-btn${viewMode === "chart" ? " active" : ""}`}
+              onClick={() => setViewMode("chart")}
+            >
+              Chart
+            </button>
+          </div>
+          {onToggleMaximize && (
+            <button className="panel-maximize-btn" onClick={onToggleMaximize} title={maximized ? "Restore" : "Maximize"}>
+              {maximized ? "\u25A3" : "\u25A1"}
+            </button>
+          )}
+        </div>
+      </div>
       <div className="timeline-filters">
         <button className="filter-btn reset-btn" onClick={resetFilters}>
           Reset
@@ -114,29 +144,33 @@ export function EventTimeline({
           </span>
         </div>
       )}
-      <div className="panel-body" ref={timelineRef} style={{ flex: 1 }}>
-        {!filtered.length ? (
-          <div className="empty-state">No events match current filters</div>
-        ) : (
-          filtered.map((ev) => {
-            const idx = events.indexOf(ev);
-            const isOrphan =
-              ev.event === "PreToolUse" &&
-              !!ev.data?.tool_use_id &&
-              orphanIds.has(ev.data.tool_use_id);
-            return (
-              <EventRow
-                key={idx}
-                event={ev}
-                index={idx}
-                isOrphan={isOrphan}
-                isHighlighted={highlightIdx === idx}
-                onFilterBySession={onFilterBySession}
-              />
-            );
-          })
-        )}
-      </div>
+      {viewMode === "list" ? (
+        <div className="panel-body" ref={timelineRef} style={{ flex: 1 }}>
+          {!filteredReversed.length ? (
+            <div className="empty-state">No events match current filters</div>
+          ) : (
+            filteredReversed.map((ev) => {
+              const idx = events.indexOf(ev);
+              const isOrphan =
+                ev.event === "PreToolUse" &&
+                !!ev.data?.tool_use_id &&
+                orphanIds.has(ev.data.tool_use_id);
+              return (
+                <EventRow
+                  key={idx}
+                  event={ev}
+                  index={idx}
+                  isOrphan={isOrphan}
+                  isHighlighted={highlightIdx === idx}
+                  onFilterBySession={onFilterBySession}
+                />
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <TimelineChart events={filtered} onFilterBySession={onFilterBySession} />
+      )}
     </div>
   );
 }
