@@ -30,6 +30,7 @@ export function EventTimeline({
   );
   const [searchText, setSearchText] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "chart">("list");
+  const [visibleCount, setVisibleCount] = useState(200);
   const timelineRef = useRef<HTMLDivElement>(null);
 
   const orphanIds = useMemo(() => new Set(summary.orphanIds || []), [summary.orphanIds]);
@@ -52,6 +53,7 @@ export function EventTimeline({
   }, [events, activeFilters, selectedSession, searchText]);
 
   const filteredReversed = useMemo(() => [...filtered].reverse(), [filtered]);
+  const visibleEvents = useMemo(() => filteredReversed.slice(0, visibleCount), [filteredReversed, visibleCount]);
 
   const toggleFilter = useCallback((type: string) => {
     setActiveFilters((prev) => {
@@ -60,19 +62,23 @@ export function EventTimeline({
       else next.add(type);
       return next;
     });
+    setVisibleCount(200);
   }, []);
 
   const filterOnly = useCallback((type: string) => {
     setActiveFilters(new Set([type]));
+    setVisibleCount(200);
   }, []);
 
   const filterIssuesOnly = useCallback(() => {
     setActiveFilters(new Set(["Stop", "PreToolUse"]));
+    setVisibleCount(200);
   }, []);
 
   const resetFilters = useCallback(() => {
     setActiveFilters(new Set(Object.keys(EVENT_TYPES)));
     setSearchText("");
+    setVisibleCount(200);
     onClearSessionFilter();
   }, [onClearSessionFilter]);
 
@@ -109,25 +115,22 @@ export function EventTimeline({
         <button className="filter-btn issues-btn" onClick={filterIssuesOnly}>
           &#9888; Issues Only
         </button>
-        {Object.entries(EVENT_TYPES).map(([type, info]) => {
-          if (!presentTypes.has(type)) return null;
-          return (
-            <span key={type}>
-              <button
-                className={`filter-btn${activeFilters.has(type) ? " active" : ""}`}
-                onClick={() => toggleFilter(type)}
-              >
-                {info.badge}
-              </button>
-              <button
-                className="filter-only-btn"
-                onClick={() => filterOnly(type)}
-              >
-                Only
-              </button>
-            </span>
-          );
-        })}
+        {Object.entries(EVENT_TYPES).map(([type, info]) => (
+          <span key={type}>
+            <button
+              className={`filter-btn${activeFilters.has(type) ? " active" : ""}${!presentTypes.has(type) ? " disabled" : ""}`}
+              onClick={() => toggleFilter(type)}
+            >
+              {info.badge}
+            </button>
+            <button
+              className="filter-only-btn"
+              onClick={() => filterOnly(type)}
+            >
+              Only
+            </button>
+          </span>
+        ))}
         <input
           className="search-input"
           type="text"
@@ -149,23 +152,33 @@ export function EventTimeline({
           {!filteredReversed.length ? (
             <div className="empty-state">No events match current filters</div>
           ) : (
-            filteredReversed.map((ev) => {
-              const idx = events.indexOf(ev);
-              const isOrphan =
-                ev.event === "PreToolUse" &&
-                !!ev.data?.tool_use_id &&
-                orphanIds.has(ev.data.tool_use_id);
-              return (
-                <EventRow
-                  key={idx}
-                  event={ev}
-                  index={idx}
-                  isOrphan={isOrphan}
-                  isHighlighted={highlightIdx === idx}
-                  onFilterBySession={onFilterBySession}
-                />
-              );
-            })
+            <>
+              {visibleEvents.map((ev) => {
+                const idx = events.indexOf(ev);
+                const isOrphan =
+                  ev.event === "PreToolUse" &&
+                  !!ev.data?.tool_use_id &&
+                  orphanIds.has(ev.data.tool_use_id);
+                return (
+                  <EventRow
+                    key={idx}
+                    event={ev}
+                    index={idx}
+                    isOrphan={isOrphan}
+                    isHighlighted={highlightIdx === idx}
+                    onFilterBySession={onFilterBySession}
+                  />
+                );
+              })}
+              {visibleCount < filteredReversed.length && (
+                <button
+                  className="load-more-btn"
+                  onClick={() => setVisibleCount((prev) => prev + 200)}
+                >
+                  Load more ({filteredReversed.length - visibleCount} remaining)
+                </button>
+              )}
+            </>
           )}
         </div>
       ) : (

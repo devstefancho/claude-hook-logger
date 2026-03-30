@@ -9,4 +9,5 @@ export const EVENT_TYPES: Record<string, { badge: string; cls: string }> = {
   SessionEnd:         { badge: "SessEnd",   cls: "badge-sess-end" },
   SubagentStart:      { badge: "SubStart",  cls: "badge-sub-start" },
   SubagentStop:       { badge: "SubStop",   cls: "badge-sub-stop" },
+  PermissionRequest:  { badge: "Perm",      cls: "badge-perm" },
 };
