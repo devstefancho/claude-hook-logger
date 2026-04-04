@@ -185,4 +185,60 @@ if [[ "$EVENT" == "SessionStart" ]]; then
     "$HOME/.claude/hooks/rotate-logs.sh" &
 fi
 
+# On SessionEnd, record session summary to vault daily note
+if [[ "$EVENT" == "SessionEnd" ]]; then
+    (
+        DATE=$(date +%Y-%m-%d)
+        TIME=$(date +%H:%M)
+        VAULT_DAILY="$HOME/.claude/vault/daily"
+        DAILY_FILE="$VAULT_DAILY/$DATE.md"
+        HISTORY="$HOME/.claude/history.jsonl"
+        SESSIONS="$HOME/.claude/sessions"
+
+        mkdir -p "$VAULT_DAILY"
+
+        # Get session name from sessions/*.json
+        SESSION_NAME=""
+        if [[ -d "$SESSIONS" ]]; then
+            for f in "$SESSIONS"/*.json; do
+                [[ -f "$f" ]] || continue
+                name=$(jq -r --arg sid "$SESSION_ID" '
+                    select(.sessionId == $sid) | .name // empty
+                ' "$f" 2>/dev/null)
+                if [[ -n "$name" ]]; then
+                    SESSION_NAME="$name"
+                    break
+                fi
+            done
+        fi
+
+        # Get git branch
+        BRANCH=$(git -C "$CWD" branch --show-current 2>/dev/null || echo "n/a")
+        SHORT_CWD="${CWD/#$HOME/~}"
+
+        # Get recent prompts from history.jsonl
+        PROMPTS=""
+        if [[ -f "$HISTORY" ]]; then
+            PROMPTS=$(jq -r --arg sid "$SESSION_ID" '
+                select(.sessionId == $sid) | .display[:120]
+            ' "$HISTORY" 2>/dev/null | tail -3 | while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "  - \"$line\""
+            done)
+        fi
+
+        # Append to daily note
+        {
+            echo ""
+            echo "## Claude session ended ($DATE $TIME)"
+            [[ -n "$SESSION_NAME" ]] && echo "- name: \"$SESSION_NAME\""
+            echo "- dir: $SHORT_CWD ($BRANCH)"
+            echo "- session: ${SESSION_ID:0:12}..."
+            if [[ -n "$PROMPTS" ]]; then
+                echo "- 최근 작업:"
+                echo "$PROMPTS"
+            fi
+        } >> "$DAILY_FILE"
+    ) &
+fi
+
 exit 0

@@ -1,6 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 import { query as sdkQuery } from "@anthropic-ai/claude-agent-sdk";
 
 // Re-export everything from data.ts for backward compatibility
@@ -15,8 +16,13 @@ export {
   filterEventsByTime,
   getSessionEvents,
   buildSessionDetail,
+  getClaudeSessions,
+  buildAgentList,
+  getRecentPrompts,
+  getCachedSummary,
+  setCachedSummary,
 } from "./data.js";
-export type { LogEvent, SessionInfo, ToolUsageEntry, Summary } from "./data.js";
+export type { LogEvent, SessionInfo, ToolUsageEntry, Summary, AgentInfo, ClaudeSession } from "./data.js";
 
 import {
   parseLogFile,
@@ -24,8 +30,11 @@ import {
   getLogFiles,
   buildSummary,
   buildMinimalContext,
+  getClaudeSessions,
+  buildAgentList,
+  getCachedSummary,
+  setCachedSummary,
 } from "./data.js";
-import type { Summary } from "./data.js";
 import { createHookLoggerMcpServer } from "./mcp-tools.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -130,6 +139,8 @@ export function handleChat(
             "mcp__hook-logger__get_recent_activity",
             "mcp__hook-logger__get_tool_skill_usage",
             "mcp__hook-logger__search_events",
+            "mcp__hook-logger__list_agents",
+            "mcp__hook-logger__get_agent_detail",
           ],
           mcpServers: { "hook-logger": mcpServer },
           permissionMode: "acceptEdits",
@@ -184,7 +195,7 @@ export function handleChat(
 export function createServer(logDir: string, htmlPath: string, webDir?: string, queryFn?: QueryFn): http.Server {
   const mcpServer = createHookLoggerMcpServer(logDir);
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url!, `http://${req.headers.host || "localhost"}`);
     const pathname = url.pathname;
 
@@ -217,6 +228,91 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
       const events = parseLogFile(logDir, file);
       const summary = buildSummary(events);
       return sendJson(res, summary);
+    }
+
+    if (pathname === "/api/agents") {
+      const includeEnded = url.searchParams.get("includeEnded") === "true";
+      const events = parseLogFile(logDir, "hook-events.jsonl");
+      const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+      const claudeSessions = getClaudeSessions(sessionsDir);
+      const agents = buildAgentList(events, claudeSessions, includeEnded);
+      for (const agent of agents) {
+        agent.summary = getCachedSummary(agent.sessionId);
+      }
+      return sendJson(res, { agents });
+    }
+
+    // POST /api/agents/:id/summary
+    const summaryMatch = pathname.match(/^\/api\/agents\/([^/]+)\/summary$/);
+    if (summaryMatch && req.method === "POST") {
+      const sessionId = summaryMatch[1];
+      const events = parseLogFile(logDir, "hook-events.jsonl");
+      const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+      const claudeSessions = getClaudeSessions(sessionsDir);
+      const agentList = buildAgentList(events, claudeSessions);
+      const agent = agentList.find(a => a.sessionId === sessionId || a.sessionId.startsWith(sessionId));
+      if (!agent) return sendJson(res, { error: "Agent not found" }, 404);
+
+      const prompts = agent.recentPrompts;
+      if (!prompts.length) return sendJson(res, { summary: "(프롬프트 없음)" });
+
+      try {
+        const promptText = prompts.map((p, i) => `${i + 1}. ${p}`).join("\n");
+        const input = `최근 프롬프트:\n${promptText}`;
+        const result = execSync(
+          `echo ${JSON.stringify(input)} | claude --bare -p "위 프롬프트들을 보고 이 세션에서 무슨 작업을 했는지 한줄(30자 이내) 한국어로 요약해. 요약만 출력해." --model haiku --no-session-persistence`,
+          { encoding: "utf-8", timeout: 30000 }
+        ).trim();
+        setCachedSummary(sessionId, result);
+        return sendJson(res, { summary: result });
+      } catch {
+        return sendJson(res, { summary: "(요약 생성 실패)" });
+      }
+    }
+
+    // POST /api/agents/:id/open-tmux
+    const tmuxMatch = pathname.match(/^\/api\/agents\/([^/]+)\/open-tmux$/);
+    if (tmuxMatch && req.method === "POST") {
+      const sessionId = tmuxMatch[1];
+      const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+      const claudeSessions = getClaudeSessions(sessionsDir);
+      const session = [...claudeSessions.values()].find(s => s.sessionId === sessionId || s.sessionId.startsWith(sessionId));
+      if (!session) return sendJson(res, { error: "Session not found" }, 404);
+
+      try {
+        // Find tmux pane containing this pid (or child process)
+        const panes = execSync("tmux list-panes -a -F '#{pane_pid} #{session_name} #{window_index}'", { encoding: "utf-8" });
+        let targetSession: string | null = null;
+        let targetWindow: string | null = null;
+        for (const line of panes.split("\n")) {
+          const parts = line.trim().split(" ");
+          if (parts.length >= 3) {
+            const panePid = parseInt(parts[0]);
+            // Check if this pane's pid matches or is a parent of the agent's pid
+            if (panePid === session.pid) {
+              targetSession = parts[1];
+              targetWindow = parts[2];
+              break;
+            }
+            // Check if the agent pid is a child of this pane
+            try {
+              const children = execSync(`pgrep -P ${panePid}`, { encoding: "utf-8" }).trim().split("\n");
+              if (children.includes(String(session.pid))) {
+                targetSession = parts[1];
+                targetWindow = parts[2];
+                break;
+              }
+            } catch { /* no children */ }
+          }
+        }
+        if (targetSession && targetWindow) {
+          execSync(`tmux select-window -t ${targetSession}:${targetWindow}`);
+          return sendJson(res, { ok: true, session: targetSession, window: targetWindow });
+        }
+        return sendJson(res, { error: "tmux window not found for this agent" }, 404);
+      } catch (err) {
+        return sendJson(res, { error: String(err) }, 500);
+      }
     }
 
     if (pathname === "/api/chat" && req.method === "POST") {

@@ -7,8 +7,11 @@ import {
   filterEventsByTime,
   getSessionEvents,
   buildSessionDetail,
+  getClaudeSessions,
+  buildAgentList,
 } from "./data.js";
 import type { LogEvent } from "./data.js";
+import path from "node:path";
 
 // ---------------------------------------------------------------------------
 // Exported handler logic (testable without MCP protocol)
@@ -164,6 +167,41 @@ export function handleSearchEvents(logDir: string, args: { event_type?: string; 
   return { totalMatches: events.length, results, truncated: events.length > limit };
 }
 
+export function handleListAgents(logDir: string, args: { status?: string }) {
+  const events = getAllEvents(logDir);
+  const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+  const claudeSessions = getClaudeSessions(sessionsDir);
+  let agents = buildAgentList(events, claudeSessions);
+
+  if (args.status && args.status !== "all") {
+    agents = agents.filter(a => a.status === args.status);
+  }
+
+  return {
+    count: agents.length,
+    agents: agents.map(a => ({
+      sessionId: a.sessionId.slice(0, 12),
+      name: a.name,
+      projectName: a.projectName,
+      status: a.status,
+      lastActivity: a.lastActivity,
+      lastTool: a.lastToolName,
+      eventCount: a.eventCount,
+      recentPrompts: a.recentPrompts.slice(-2),
+    })),
+  };
+}
+
+export function handleGetAgentDetail(logDir: string, args: { session_id: string }) {
+  const events = getAllEvents(logDir);
+  const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+  const claudeSessions = getClaudeSessions(sessionsDir);
+  const agents = buildAgentList(events, claudeSessions);
+  const agent = agents.find(a => a.sessionId === args.session_id || a.sessionId.startsWith(args.session_id));
+  if (!agent) return { error: "Agent not found" };
+  return agent;
+}
+
 // ---------------------------------------------------------------------------
 // MCP Server (thin wrappers around exported handlers)
 // ---------------------------------------------------------------------------
@@ -229,6 +267,26 @@ export function createHookLoggerMcpServer(logDir: string) {
           session_id: z.string().optional().describe("Only count usage for a specific session"),
         },
         async (args) => mcpContent(handleGetToolSkillUsage(logDir, args)),
+        { annotations: { readOnlyHint: true } },
+      ),
+
+      tool(
+        "list_agents",
+        "List active Claude Code agents with their status, project, and recent prompts. Use this to understand what agents are currently doing.",
+        {
+          status: z.enum(["active", "idle", "waiting", "ended", "all"]).optional().describe("Filter by agent status (default: all)"),
+        },
+        async (args) => mcpContent(handleListAgents(logDir, args)),
+        { annotations: { readOnlyHint: true } },
+      ),
+
+      tool(
+        "get_agent_detail",
+        "Get detailed information about a specific agent including session name, project, status, and recent prompts.",
+        {
+          session_id: z.string().describe("Session ID or prefix to match"),
+        },
+        async (args) => mcpContent(handleGetAgentDetail(logDir, args)),
         { annotations: { readOnlyHint: true } },
       ),
 

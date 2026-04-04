@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useLogData } from "./hooks/useLogData";
 import { useAutoRefresh } from "./hooks/useAutoRefresh";
+import { useAgents } from "./hooks/useAgents";
 import { Header } from "./components/Header";
 import { StatBar } from "./components/StatBar";
 import { SessionList } from "./components/SessionList";
@@ -20,8 +21,15 @@ export function App() {
     selectFile,
   } = useLogData();
 
+  const { agents, loadAgents, generateSummary, openInTmux } = useAgents();
+
+  const refreshAll = useCallback(async () => {
+    await checkForUpdates();
+    await loadAgents();
+  }, [checkForUpdates, loadAgents]);
+
   const { enabled: autoRefresh, toggle: toggleAutoRefresh } =
-    useAutoRefresh(checkForUpdates);
+    useAutoRefresh(refreshAll);
 
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [highlightIdx, setHighlightIdx] = useState<number | null>(null);
@@ -37,8 +45,11 @@ export function App() {
   const horizontalDragging = useRef(false);
 
   useEffect(() => {
-    loadFiles().then(() => loadData());
-  }, [loadFiles, loadData]);
+    loadFiles().then(() => {
+      loadData();
+      loadAgents();
+    });
+  }, [loadFiles, loadData, loadAgents]);
 
   const handleSelectSession = useCallback((sid: string) => {
     setSelectedSession((prev) => (prev === sid ? null : sid));
@@ -167,6 +178,10 @@ export function App() {
               onScrollToEvent={scrollToEvent}
               maximized
               onToggleMaximize={() => toggleMaximize("leftTabs")}
+              agents={agents}
+              onGenerateSummary={generateSummary}
+              onOpenTmux={openInTmux}
+              onSelectSession={handleSelectSession}
             />
           </div>
         ) : maximizedPanel === "timeline" ? (
@@ -206,6 +221,10 @@ export function App() {
                 events={events}
                 onScrollToEvent={scrollToEvent}
                 onToggleMaximize={() => toggleMaximize("leftTabs")}
+                agents={agents}
+                onGenerateSummary={generateSummary}
+                onOpenTmux={openInTmux}
+                onSelectSession={handleSelectSession}
               />
             </div>
             <div

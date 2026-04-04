@@ -51,6 +51,22 @@ export interface Summary {
   orphanIds: string[];
 }
 
+export interface AgentInfo {
+  sessionId: string;
+  name: string | null;
+  cwd: string;
+  projectName: string;
+  branch: string | null;
+  status: "active" | "idle" | "waiting" | "ended";
+  lastActivity: string;
+  lastToolName: string | null;
+  sessionDuration: number;
+  eventCount: number;
+  summary: string | null;
+  recentPrompts: string[];
+  pid: number | null;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;

@@ -324,6 +324,191 @@ export function buildSessionDetail(events: LogEvent[], sessionId: string): {
   return { sessionId, eventCount: sessionEvents.length, firstTs, lastTs, cwd, tools, skills, events: eventList };
 }
 
+// --- Agent orchestration ---
+
+export interface ClaudeSession {
+  pid: number;
+  sessionId: string;
+  cwd: string;
+  startedAt: number;
+  kind?: string;
+  entrypoint?: string;
+  name?: string;
+}
+
+export interface AgentInfo {
+  sessionId: string;
+  name: string | null;
+  cwd: string;
+  projectName: string;
+  branch: string | null;
+  status: "active" | "idle" | "waiting" | "ended";
+  lastActivity: string;
+  lastToolName: string | null;
+  sessionDuration: number;
+  eventCount: number;
+  summary: string | null;
+  recentPrompts: string[];
+  pid: number | null;
+}
+
+export function getClaudeSessions(sessionsDir: string): Map<string, ClaudeSession> {
+  const result = new Map<string, ClaudeSession>();
+  if (!fs.existsSync(sessionsDir)) return result;
+  for (const file of fs.readdirSync(sessionsDir)) {
+    if (!file.endsWith(".json")) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), "utf-8"));
+      if (data.sessionId) {
+        result.set(data.sessionId, data as ClaudeSession);
+      }
+    } catch {
+      // skip malformed
+    }
+  }
+  return result;
+}
+
+function mangleCwd(cwd: string): string {
+  return "-" + cwd.replace(/^\//g, "").replace(/\//g, "-");
+}
+
+export function getRecentPrompts(sessionId: string, cwd: string, count = 3): string[] {
+  const projectsDir = path.join(process.env.HOME || "", ".claude", "projects");
+  const mangledCwd = mangleCwd(cwd);
+  const sessionFile = path.join(projectsDir, mangledCwd, `${sessionId}.jsonl`);
+  if (!fs.existsSync(sessionFile)) return [];
+
+  const prompts: string[] = [];
+  const content = fs.readFileSync(sessionFile, "utf-8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const data = JSON.parse(trimmed);
+      if (data.type === "user" && data.message?.content) {
+        const text = typeof data.message.content === "string"
+          ? data.message.content
+          : Array.isArray(data.message.content)
+            ? data.message.content.filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join(" ")
+            : "";
+        if (text) prompts.push(text.slice(0, 200));
+      }
+    } catch {
+      // skip
+    }
+  }
+  return prompts.slice(-count);
+}
+
+function extractProjectName(cwd: string): string {
+  const home = process.env.HOME || "";
+  const relative = cwd.startsWith(home) ? cwd.slice(home.length + 1) : cwd;
+  const parts = relative.split("/");
+  if (parts.length > 3) {
+    return parts.slice(-3).join("/");
+  }
+  return relative;
+}
+
+export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, ClaudeSession>, includeEnded = false): AgentInfo[] {
+  const summary = buildSummary(events);
+  const now = Date.now();
+
+  // Pre-index: last significant event per session, last tool event per session
+  const lastSignificantBySession = new Map<string, LogEvent>();
+  const lastToolBySession = new Map<string, LogEvent>();
+  for (const ev of events) {
+    const sid = ev.session_id || "unknown";
+    if (ev.event === "Stop" || ev.event === "PreToolUse" || ev.event === "PostToolUse" || ev.event === "UserPromptSubmit") {
+      lastSignificantBySession.set(sid, ev);
+    }
+    if ((ev.event === "PreToolUse" || ev.event === "PostToolUse") && ev.data?.tool_name) {
+      lastToolBySession.set(sid, ev);
+    }
+  }
+
+  const agents: AgentInfo[] = [];
+
+  for (const sess of summary.sessions) {
+    const claudeSession = claudeSessions.get(sess.id);
+
+    // Determine status
+    let status: AgentInfo["status"];
+    if (sess.hasSessionEnd) {
+      status = "ended";
+    } else {
+      const lastSignificant = lastSignificantBySession.get(sess.id);
+      if (lastSignificant?.event === "Stop" && lastSignificant.data?.stop_hook_active) {
+        status = "waiting";
+      } else if (sess.isLive) {
+        status = "active";
+      } else if (sess.isStale) {
+        status = "idle";
+      } else {
+        status = "ended";
+      }
+    }
+
+    // Skip ended sessions unless explicitly requested
+    if (status === "ended" && !includeEnded) continue;
+
+    const lastToolEvent = lastToolBySession.get(sess.id);
+    const cwd = claudeSession?.cwd || sess.cwd;
+
+    // Only read prompts for non-ended sessions (expensive I/O)
+    const recentPrompts = getRecentPrompts(sess.id, cwd);
+
+    let branch: string | null = null;
+    const treesMatch = cwd.match(/\/trees\/([^/]+)/);
+    if (treesMatch) branch = treesMatch[1];
+
+    const startedAt = claudeSession?.startedAt || new Date(sess.firstTs).getTime();
+    const sessionDuration = now - startedAt;
+
+    agents.push({
+      sessionId: sess.id,
+      name: claudeSession?.name || null,
+      cwd,
+      projectName: extractProjectName(cwd),
+      branch,
+      status,
+      lastActivity: sess.lastTs,
+      lastToolName: lastToolEvent?.data?.tool_name || null,
+      sessionDuration,
+      eventCount: sess.eventCount,
+      summary: null,
+      recentPrompts,
+      pid: claudeSession?.pid || null,
+    });
+  }
+
+  // Sort: active > waiting > idle > ended, then by lastActivity desc
+  const statusOrder = { active: 0, waiting: 1, idle: 2, ended: 3 };
+  agents.sort((a, b) => {
+    const so = statusOrder[a.status] - statusOrder[b.status];
+    if (so !== 0) return so;
+    return b.lastActivity > a.lastActivity ? 1 : -1;
+  });
+
+  return agents;
+}
+
+// Summary cache for agent summaries
+const summaryCache = new Map<string, { text: string; expiry: number }>();
+const SUMMARY_TTL_MS = 5 * 60 * 1000;
+
+export function getCachedSummary(sessionId: string): string | null {
+  const cached = summaryCache.get(sessionId);
+  if (cached && cached.expiry > Date.now()) return cached.text;
+  summaryCache.delete(sessionId);
+  return null;
+}
+
+export function setCachedSummary(sessionId: string, text: string): void {
+  summaryCache.set(sessionId, { text, expiry: Date.now() + SUMMARY_TTL_MS });
+}
+
 export function buildMinimalContext(summary: Summary): string {
   return `You are an assistant that analyzes Claude Code hook event data.
 You have MCP tools (hook-logger) to query data. Use them for detailed answers.
