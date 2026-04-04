@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { LogEvent, Summary } from "../types";
 import { EVENT_TYPES } from "../utils/constants";
 import { EventRow } from "./EventRow";
@@ -29,9 +30,14 @@ export function EventTimeline({
     () => new Set(Object.keys(EVENT_TYPES)),
   );
   const [searchText, setSearchText] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "chart">("list");
-  const [visibleCount, setVisibleCount] = useState(200);
-  const timelineRef = useRef<HTMLDivElement>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchText), 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
 
   const orphanIds = useMemo(() => new Set(summary.orphanIds || []), [summary.orphanIds]);
   const presentTypes = useMemo(
@@ -40,20 +46,21 @@ export function EventTimeline({
   );
 
   const filtered = useMemo(() => {
-    return events
-      .filter((ev) => {
-        if (!activeFilters.has(ev.event)) return false;
-        if (selectedSession && ev.session_id !== selectedSession) return false;
-        if (searchText) {
-          const haystack = JSON.stringify(ev).toLowerCase();
-          if (!haystack.includes(searchText.toLowerCase())) return false;
-        }
-        return true;
-      });
-  }, [events, activeFilters, selectedSession, searchText]);
+    const result: { ev: LogEvent; idx: number }[] = [];
+    for (let i = 0; i < events.length; i++) {
+      const ev = events[i];
+      if (!activeFilters.has(ev.event)) continue;
+      if (selectedSession && ev.session_id !== selectedSession) continue;
+      if (debouncedSearch) {
+        const haystack = JSON.stringify(ev).toLowerCase();
+        if (!haystack.includes(debouncedSearch.toLowerCase())) continue;
+      }
+      result.push({ ev, idx: i });
+    }
+    return result;
+  }, [events, activeFilters, selectedSession, debouncedSearch]);
 
   const filteredReversed = useMemo(() => [...filtered].reverse(), [filtered]);
-  const visibleEvents = useMemo(() => filteredReversed.slice(0, visibleCount), [filteredReversed, visibleCount]);
 
   const toggleFilter = useCallback((type: string) => {
     setActiveFilters((prev) => {
@@ -62,25 +69,29 @@ export function EventTimeline({
       else next.add(type);
       return next;
     });
-    setVisibleCount(200);
   }, []);
 
   const filterOnly = useCallback((type: string) => {
     setActiveFilters(new Set([type]));
-    setVisibleCount(200);
   }, []);
 
   const filterIssuesOnly = useCallback(() => {
     setActiveFilters(new Set(["Stop", "PreToolUse"]));
-    setVisibleCount(200);
   }, []);
 
   const resetFilters = useCallback(() => {
     setActiveFilters(new Set(Object.keys(EVENT_TYPES)));
     setSearchText("");
-    setVisibleCount(200);
+    setDebouncedSearch("");
     onClearSessionFilter();
   }, [onClearSessionFilter]);
+
+  const virtualizer = useVirtualizer({
+    count: filteredReversed.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 36,
+    overscan: 20,
+  });
 
   return (
     <div className="panel" style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -148,41 +159,51 @@ export function EventTimeline({
         </div>
       )}
       {viewMode === "list" ? (
-        <div className="panel-body" ref={timelineRef} style={{ flex: 1 }}>
+        <div className="panel-body" ref={parentRef} style={{ flex: 1 }}>
           {!filteredReversed.length ? (
             <div className="empty-state">No events match current filters</div>
           ) : (
-            <>
-              {visibleEvents.map((ev) => {
-                const idx = events.indexOf(ev);
+            <div
+              style={{
+                height: virtualizer.getTotalSize(),
+                width: "100%",
+                position: "relative",
+              }}
+            >
+              {virtualizer.getVirtualItems().map((virtualItem) => {
+                const { ev, idx } = filteredReversed[virtualItem.index];
                 const isOrphan =
                   ev.event === "PreToolUse" &&
                   !!ev.data?.tool_use_id &&
                   orphanIds.has(ev.data.tool_use_id);
                 return (
-                  <EventRow
+                  <div
                     key={idx}
-                    event={ev}
-                    index={idx}
-                    isOrphan={isOrphan}
-                    isHighlighted={highlightIdx === idx}
-                    onFilterBySession={onFilterBySession}
-                  />
+                    data-index={virtualItem.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                  >
+                    <EventRow
+                      event={ev}
+                      index={idx}
+                      isOrphan={isOrphan}
+                      isHighlighted={highlightIdx === idx}
+                      onFilterBySession={onFilterBySession}
+                    />
+                  </div>
                 );
               })}
-              {visibleCount < filteredReversed.length && (
-                <button
-                  className="load-more-btn"
-                  onClick={() => setVisibleCount((prev) => prev + 200)}
-                >
-                  Load more ({filteredReversed.length - visibleCount} remaining)
-                </button>
-              )}
-            </>
+            </div>
           )}
         </div>
       ) : (
-        <TimelineChart events={filtered} onFilterBySession={onFilterBySession} />
+        <TimelineChart events={filtered.map(({ ev }) => ev)} onFilterBySession={onFilterBySession} />
       )}
     </div>
   );

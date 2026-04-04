@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { LogEvent, Summary, AgentInfo } from "../types";
 import { ToolUsage } from "./ToolUsage";
 import { SkillUsage } from "./SkillUsage";
@@ -24,7 +24,7 @@ export function LeftTabs({
   agents, onGenerateSummary, onOpenTmux, onSelectSession,
 }: LeftTabsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("agents");
-  const orphanIds = new Set(summary.orphanIds || []);
+  const orphanIds = useMemo(() => new Set(summary.orphanIds || []), [summary.orphanIds]);
 
   return (
     <div className="panel" style={{ flex: 1, minHeight: 0 }}>

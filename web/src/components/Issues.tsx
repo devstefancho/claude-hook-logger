@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { LogEvent } from "../types";
 import { formatRelativeTime } from "../utils/format";
 
@@ -8,14 +9,23 @@ interface IssuesProps {
 }
 
 export function Issues({ events, orphanIds, onScrollToEvent }: IssuesProps) {
-  const interrupts = events.filter(
-    (e) => e.event === "Stop" && e.data?.stop_hook_active,
+  const interrupts = useMemo(
+    () =>
+      events.reduce<{ ev: LogEvent; idx: number }[]>((acc, ev, idx) => {
+        if (ev.event === "Stop" && ev.data?.stop_hook_active) acc.push({ ev, idx });
+        return acc;
+      }, []),
+    [events],
   );
-  const orphans = events.filter(
-    (e) =>
-      e.event === "PreToolUse" &&
-      e.data?.tool_use_id &&
-      orphanIds.has(e.data.tool_use_id),
+
+  const orphans = useMemo(
+    () =>
+      events.reduce<{ ev: LogEvent; idx: number }[]>((acc, ev, idx) => {
+        if (ev.event === "PreToolUse" && ev.data?.tool_use_id && orphanIds.has(ev.data.tool_use_id))
+          acc.push({ ev, idx });
+        return acc;
+      }, []),
+    [events, orphanIds],
   );
 
   if (!interrupts.length && !orphans.length) {
@@ -29,38 +39,32 @@ export function Issues({ events, orphanIds, onScrollToEvent }: IssuesProps) {
         <br />
         Orphans: tool calls without a completion response (interrupted/session ended)
       </div>
-      {interrupts.map((ev) => {
-        const idx = events.indexOf(ev);
-        return (
-          <div
-            key={`int-${idx}`}
-            className="issue-item interrupt-item"
-            onClick={() => onScrollToEvent(idx)}
-          >
-            <div className="issue-label red">&#9889; Interrupt</div>
-            <div className="issue-detail">
-              {formatRelativeTime(ev.ts)} ago &middot; session{" "}
-              {ev.session_id?.slice(0, 8)}
-            </div>
+      {interrupts.map(({ ev, idx }) => (
+        <div
+          key={`int-${idx}`}
+          className="issue-item interrupt-item"
+          onClick={() => onScrollToEvent(idx)}
+        >
+          <div className="issue-label red">&#9889; Interrupt</div>
+          <div className="issue-detail">
+            {formatRelativeTime(ev.ts)} ago &middot; session{" "}
+            {ev.session_id?.slice(0, 8)}
           </div>
-        );
-      })}
-      {orphans.map((ev) => {
-        const idx = events.indexOf(ev);
-        return (
-          <div
-            key={`orph-${idx}`}
-            className="issue-item orphan-item"
-            onClick={() => onScrollToEvent(idx)}
-          >
-            <div className="issue-label yellow">&#9888; Orphan Tool Call</div>
-            <div className="issue-detail">
-              {ev.data?.tool_name} &middot; {formatRelativeTime(ev.ts)} ago
-              &middot; session {ev.session_id?.slice(0, 8)}
-            </div>
+        </div>
+      ))}
+      {orphans.map(({ ev, idx }) => (
+        <div
+          key={`orph-${idx}`}
+          className="issue-item orphan-item"
+          onClick={() => onScrollToEvent(idx)}
+        >
+          <div className="issue-label yellow">&#9888; Orphan Tool Call</div>
+          <div className="issue-detail">
+            {ev.data?.tool_name} &middot; {formatRelativeTime(ev.ts)} ago
+            &middot; session {ev.session_id?.slice(0, 8)}
           </div>
-        );
-      })}
+        </div>
+      ))}
     </>
   );
 }
