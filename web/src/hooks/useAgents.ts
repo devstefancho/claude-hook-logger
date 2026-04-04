@@ -5,6 +5,7 @@ export function useAgents() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [threshold, setThreshold] = useState(5); // minutes
+  const [actionStatus, setActionStatus] = useState<{ id: string; type: string; ok: boolean } | null>(null);
   const initialLoad = useRef(false);
 
   const loadAgents = useCallback(async () => {
@@ -22,19 +23,30 @@ export function useAgents() {
 
   const generateSummary = useCallback(async (sessionId: string) => {
     try {
-      await fetch(`/api/agents/${sessionId}/summary`, { method: "POST" });
-      await loadAgents();
+      setActionStatus({ id: sessionId, type: "summary", ok: true });
+      const res = await fetch(`/api/agents/${sessionId}/summary`, { method: "POST" });
+      if (!res.ok) {
+        setActionStatus({ id: sessionId, type: "summary", ok: false });
+      } else {
+        await loadAgents();
+      }
     } catch {
-      // ignore
+      setActionStatus({ id: sessionId, type: "summary", ok: false });
     }
+    setTimeout(() => setActionStatus(null), 2000);
   }, [loadAgents]);
 
   const openInTmux = useCallback(async (sessionId: string) => {
     try {
-      await fetch(`/api/agents/${sessionId}/open-tmux`, { method: "POST" });
+      setActionStatus({ id: sessionId, type: "tmux", ok: true });
+      const res = await fetch(`/api/agents/${sessionId}/open-tmux`, { method: "POST" });
+      if (!res.ok) {
+        setActionStatus({ id: sessionId, type: "tmux", ok: false });
+      }
     } catch {
-      // ignore
+      setActionStatus({ id: sessionId, type: "tmux", ok: false });
     }
+    setTimeout(() => setActionStatus(null), 2000);
   }, []);
 
   // Re-fetch when threshold changes (skip initial render)
@@ -46,5 +58,5 @@ export function useAgents() {
     loadAgents();
   }, [loadAgents]);
 
-  return { agents, loading, loadAgents, generateSummary, openInTmux, threshold, setThreshold };
+  return { agents, loading, loadAgents, generateSummary, openInTmux, threshold, setThreshold, actionStatus };
 }

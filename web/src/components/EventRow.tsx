@@ -9,6 +9,8 @@ interface EventRowProps {
   index: number;
   isOrphan: boolean;
   isHighlighted: boolean;
+  isExpanded: boolean;
+  onToggleExpand: (idx: number) => void;
   onFilterBySession: (sid: string) => void;
 }
 
@@ -44,11 +46,30 @@ function escHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function syntaxHighlight(json: string): string {
+  return json.replace(
+    /("(?:\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+    (match) => {
+      let cls = "json-number";
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? "json-key" : "json-string";
+      } else if (/true|false/.test(match)) {
+        cls = "json-bool";
+      } else if (/null/.test(match)) {
+        cls = "json-null";
+      }
+      return `<span class="${cls}">${match}</span>`;
+    },
+  );
+}
+
 export const EventRow = memo(function EventRow({
   event: ev,
   index,
   isOrphan,
   isHighlighted,
+  isExpanded,
+  onToggleExpand,
   onFilterBySession,
 }: EventRowProps) {
   const info = EVENT_TYPES[ev.event] || { badge: ev.event, cls: "badge-stop" };
@@ -57,6 +78,7 @@ export const EventRow = memo(function EventRow({
     "event-row",
     isOrphan ? "orphan" : "",
     isHighlighted ? "highlight" : "",
+    isExpanded ? "expanded" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -66,26 +88,42 @@ export const EventRow = memo(function EventRow({
 
   return (
     <div className={rowCls} id={`ev-${index}`}>
-      <span className="time" title={formatAbsTime(ev.ts)}>
-        {formatRelativeTime(ev.ts)}
-      </span>
-      <span className={`badge ${info.cls}`}>{info.badge}</span>
-      {isOrphan && <span className="extra-badge badge-orphan">ORPHAN</span>}
-      {isInterrupt && (
-        <span className="extra-badge badge-interrupt">&#9889; INTERRUPT</span>
+      <div className="event-row-main" onClick={() => onToggleExpand(index)}>
+        <span className="expand-indicator">{isExpanded ? "▾" : "▸"}</span>
+        <span className="time" title={formatAbsTime(ev.ts)}>
+          {formatRelativeTime(ev.ts)}
+        </span>
+        <span className={`badge ${info.cls}`}>{info.badge}</span>
+        {isOrphan && <span className="extra-badge badge-orphan">ORPHAN</span>}
+        {isInterrupt && (
+          <span className="extra-badge badge-interrupt">&#9889; INTERRUPT</span>
+        )}
+        <span
+          className="detail"
+          dangerouslySetInnerHTML={{ __html: buildDetail(ev) }}
+        />
+        <span
+          className="session-tag clickable"
+          onClick={(e) => {
+            e.stopPropagation();
+            onFilterBySession(ev.session_id || "");
+          }}
+          title="Filter by this session"
+          style={sessionColor ? { background: sessionBg, color: sessionColor, borderRadius: 3 } : undefined}
+        >
+          {shortSid}
+        </span>
+      </div>
+      {isExpanded && (
+        <div className="event-detail-panel">
+          <pre
+            className="event-json"
+            dangerouslySetInnerHTML={{
+              __html: syntaxHighlight(JSON.stringify(ev, null, 2)),
+            }}
+          />
+        </div>
       )}
-      <span
-        className="detail"
-        dangerouslySetInnerHTML={{ __html: buildDetail(ev) }}
-      />
-      <span
-        className="session-tag clickable"
-        onClick={() => onFilterBySession(ev.session_id || "")}
-        title="Filter by this session"
-        style={sessionColor ? { background: sessionBg, color: sessionColor, borderRadius: 3 } : undefined}
-      >
-        {shortSid}
-      </span>
     </div>
   );
 });
