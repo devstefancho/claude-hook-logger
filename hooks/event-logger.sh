@@ -144,6 +144,34 @@ case "$EVENT" in
             --arg atype "$AGENT_TYPE" \
             '{agent_id: $aid, agent_type: $atype}')
         ;;
+    PermissionRequest)
+        TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // "unknown"')
+        # Extract tool-specific summary (same logic as PreToolUse)
+        case "$TOOL_NAME" in
+            Bash)
+                SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.command // empty' | head -c 200)
+                ;;
+            Read|Write|Edit)
+                SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+                ;;
+            Glob|Grep)
+                SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.pattern // empty')
+                ;;
+            WebFetch)
+                SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.url // empty')
+                ;;
+            WebSearch)
+                SUMMARY=$(echo "$INPUT" | jq -r '.tool_input.query // empty')
+                ;;
+            *)
+                SUMMARY=$(echo "$INPUT" | jq -r '.tool_input | tostring' 2>/dev/null | head -c 200)
+                ;;
+        esac
+        DATA=$(jq -n \
+            --arg tool "$TOOL_NAME" \
+            --arg summary "$SUMMARY" \
+            '{tool_name: $tool, tool_input_summary: $summary}')
+        ;;
     *)
         DATA='{}'
         ;;

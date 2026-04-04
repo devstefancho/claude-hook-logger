@@ -259,6 +259,7 @@ body {
   transition: all 0.15s;
 }
 .filter-btn.active { border-color: #58a6ff; color: #c9d1d9; background: #1f6feb33; }
+.filter-btn.disabled { opacity: 0.35; }
 .filter-btn:hover { border-color: #58a6ff; }
 .filter-btn.reset-btn {
   border-color: #da3633;
@@ -367,6 +368,22 @@ body {
 .badge-sess-end { background: #88888822; color: #888888; }
 .badge-sub-start { background: #bb66ff22; color: #bb66ff; }
 .badge-sub-stop { background: #8844cc22; color: #8844cc; }
+.badge-perm { background: #ff66aa22; color: #ff66aa; }
+
+.load-more-btn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin: 8px 0;
+  background: #1f6feb22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #58a6ff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.load-more-btn:hover { background: #1f6feb44; }
 
 /* Issue Items */
 .issue-item {

@@ -22,6 +22,8 @@ function buildDetail(ev: LogEvent): string {
       return `<span class="tool">${escHtml(d.tool_name || "")}</span> &#10008; ${escHtml(truncate(d.error || "", 100))}`;
     case "UserPromptSubmit":
       return escHtml(truncate(d.prompt || d.message || JSON.stringify(d), 150));
+    case "PermissionRequest":
+      return `<span class="tool">${escHtml(d.tool_name || "")}</span> ${escHtml(truncate(d.tool_input_summary || "", 120))}`;
     case "Stop":
       return d.stop_hook_active
         ? "&#9889; Session interrupted (stop hook)"

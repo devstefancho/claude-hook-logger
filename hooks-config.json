@@ -107,6 +107,17 @@
           }
         ]
       }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/event-logger.sh",
+            "async": true
+          }
+        ]
+      }
     ]
   }
 }

@@ -493,6 +493,118 @@ describe('SubagentStop', () => {
   });
 });
 
+// ─── PermissionRequest ─────────────────────────────────────────────────────
+
+describe('PermissionRequest', () => {
+  it('captures tool_name and tool_input_summary for Bash', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'Bash',
+      tool_input: { command: 'rm -rf node_modules' },
+    });
+    const data = result.logLines[0].data as Record<string, unknown>;
+    assert.equal(data.tool_name, 'Bash');
+    assert.equal(data.tool_input_summary, 'rm -rf node_modules');
+  });
+
+  it('captures file_path for Read tool', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'Read',
+      tool_input: { file_path: '/etc/passwd' },
+    });
+    const data = result.logLines[0].data as Record<string, unknown>;
+    assert.equal(data.tool_name, 'Read');
+    assert.equal(data.tool_input_summary, '/etc/passwd');
+  });
+
+  it('captures file_path for Write tool', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'Write',
+      tool_input: { file_path: '/tmp/output.txt' },
+    });
+    const data = result.logLines[0].data as Record<string, unknown>;
+    assert.equal(data.tool_name, 'Write');
+    assert.equal(data.tool_input_summary, '/tmp/output.txt');
+  });
+
+  it('captures file_path for Edit tool', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'Edit',
+      tool_input: { file_path: '/src/main.ts' },
+    });
+    const data = result.logLines[0].data as Record<string, unknown>;
+    assert.equal(data.tool_name, 'Edit');
+    assert.equal(data.tool_input_summary, '/src/main.ts');
+  });
+
+  it('captures pattern for Glob tool', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'Glob',
+      tool_input: { pattern: '**/*.ts' },
+    });
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, '**/*.ts');
+  });
+
+  it('captures pattern for Grep tool', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'Grep',
+      tool_input: { pattern: 'password' },
+    });
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, 'password');
+  });
+
+  it('captures url for WebFetch tool', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'WebFetch',
+      tool_input: { url: 'https://example.com' },
+    });
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, 'https://example.com');
+  });
+
+  it('captures query for WebSearch tool', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'WebSearch',
+      tool_input: { query: 'claude code hooks' },
+    });
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_input_summary, 'claude code hooks');
+  });
+
+  it('unknown tool captures tool_input as string', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'MCP',
+      tool_input: { server: 'my-server', tool: 'my-tool' },
+    });
+    const data = result.logLines[0].data as Record<string, unknown>;
+    assert.equal(data.tool_name, 'MCP');
+    assert.ok((data.tool_input_summary as string).includes('my-server'));
+  });
+
+  it('tool_name defaults to unknown when missing', () => {
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+    });
+    assert.equal((result.logLines[0].data as Record<string, unknown>).tool_name, 'unknown');
+  });
+
+  it('truncates long Bash command to 200 chars', () => {
+    const longCmd = 'echo ' + 'x'.repeat(300);
+    const result = runEventLogger(tempHome, {
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'Bash',
+      tool_input: { command: longCmd },
+    });
+    assert.ok(((result.logLines[0].data as Record<string, unknown>).tool_input_summary as string).length <= 200);
+  });
+});
+
 // ─── Unknown event ──────────────────────────────────────────────────────────
 
 describe('Unknown event type', () => {
