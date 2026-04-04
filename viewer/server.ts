@@ -232,10 +232,12 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
 
     if (pathname === "/api/agents") {
       const includeEnded = url.searchParams.get("includeEnded") === "true";
+      const thresholdMin = parseInt(url.searchParams.get("threshold") || "5", 10);
+      const thresholdMs = thresholdMin * 60 * 1000;
       const events = parseLogFile(logDir, "hook-events.jsonl");
       const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
       const claudeSessions = getClaudeSessions(sessionsDir);
-      const agents = buildAgentList(events, claudeSessions, includeEnded);
+      const agents = buildAgentList(events, claudeSessions, { includeEnded, thresholdMs });
       for (const agent of agents) {
         agent.summary = getCachedSummary(agent.sessionId);
       }
@@ -249,7 +251,7 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
       const events = parseLogFile(logDir, "hook-events.jsonl");
       const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
       const claudeSessions = getClaudeSessions(sessionsDir);
-      const agentList = buildAgentList(events, claudeSessions);
+      const agentList = buildAgentList(events, claudeSessions, { includeEnded: true });
       const agent = agentList.find(a => a.sessionId === sessionId || a.sessionId.startsWith(sessionId));
       if (!agent) return sendJson(res, { error: "Agent not found" }, 404);
 

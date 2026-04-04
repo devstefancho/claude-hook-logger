@@ -805,6 +805,32 @@ body {
 
 /* Responsive */
 /* Agent Panel */
+.agent-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-bottom: 1px solid #21262d;
+  font-size: 11px;
+  color: #8b949e;
+}
+.agent-counts { font-weight: 600; }
+.agent-threshold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.agent-threshold-select {
+  background: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 1px 4px;
+  cursor: pointer;
+}
+.agent-threshold-select:hover { border-color: #58a6ff; }
+
 .agent-card {
   padding: 8px 10px;
   margin: 4px 0;

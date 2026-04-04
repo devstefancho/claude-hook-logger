@@ -21,7 +21,7 @@ export function App() {
     selectFile,
   } = useLogData();
 
-  const { agents, loadAgents, generateSummary, openInTmux } = useAgents();
+  const { agents, loadAgents, generateSummary, openInTmux, threshold, setThreshold } = useAgents();
 
   const refreshAll = useCallback(async () => {
     await checkForUpdates();
@@ -222,6 +222,8 @@ export function App() {
                 onScrollToEvent={scrollToEvent}
                 onToggleMaximize={() => toggleMaximize("leftTabs")}
                 agents={agents}
+                agentThreshold={threshold}
+                onAgentThresholdChange={setThreshold}
                 onGenerateSummary={generateSummary}
                 onOpenTmux={openInTmux}
                 onSelectSession={handleSelectSession}

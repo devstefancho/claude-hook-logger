@@ -14,6 +14,8 @@ interface LeftTabsProps {
   maximized?: boolean;
   onToggleMaximize?: () => void;
   agents?: AgentInfo[];
+  agentThreshold?: number;
+  onAgentThresholdChange?: (value: number) => void;
   onGenerateSummary?: (sid: string) => void;
   onOpenTmux?: (sid: string) => void;
   onSelectSession?: (sid: string) => void;
@@ -21,7 +23,7 @@ interface LeftTabsProps {
 
 export function LeftTabs({
   summary, events, onScrollToEvent, maximized, onToggleMaximize,
-  agents, onGenerateSummary, onOpenTmux, onSelectSession,
+  agents, agentThreshold, onAgentThresholdChange, onGenerateSummary, onOpenTmux, onSelectSession,
 }: LeftTabsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("agents");
   const orphanIds = useMemo(() => new Set(summary.orphanIds || []), [summary.orphanIds]);
@@ -53,6 +55,8 @@ export function LeftTabs({
         {activeTab === "agents" && (
           <AgentPanel
             agents={agents || []}
+            threshold={agentThreshold ?? 5}
+            onThresholdChange={onAgentThresholdChange || (() => {})}
             onSelectSession={onSelectSession || (() => {})}
             onGenerateSummary={onGenerateSummary || (() => {})}
             onOpenTmux={onOpenTmux || (() => {})}

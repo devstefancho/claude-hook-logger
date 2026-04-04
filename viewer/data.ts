@@ -411,7 +411,8 @@ function extractProjectName(cwd: string): string {
   return relative;
 }
 
-export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, ClaudeSession>, includeEnded = false): AgentInfo[] {
+export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, ClaudeSession>, options: { includeEnded?: boolean; thresholdMs?: number } = {}): AgentInfo[] {
+  const { includeEnded = false, thresholdMs = 5 * 60 * 1000 } = options;
   const summary = buildSummary(events);
   const now = Date.now();
 
@@ -433,7 +434,7 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
   for (const sess of summary.sessions) {
     const claudeSession = claudeSessions.get(sess.id);
 
-    // Determine status
+    // Determine status using custom threshold
     let status: AgentInfo["status"];
     if (sess.hasSessionEnd) {
       status = "ended";
@@ -441,12 +442,14 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
       const lastSignificant = lastSignificantBySession.get(sess.id);
       if (lastSignificant?.event === "Stop" && lastSignificant.data?.stop_hook_active) {
         status = "waiting";
-      } else if (sess.isLive) {
-        status = "active";
-      } else if (sess.isStale) {
-        status = "idle";
       } else {
-        status = "ended";
+        const hasNoEnd = sess.hasSessionStart && !sess.hasSessionEnd;
+        if (hasNoEnd) {
+          const elapsed = now - new Date(sess.lastTs).getTime();
+          status = elapsed <= thresholdMs ? "active" : "idle";
+        } else {
+          status = "ended";
+        }
       }
     }
 

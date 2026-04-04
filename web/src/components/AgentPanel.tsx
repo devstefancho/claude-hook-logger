@@ -15,6 +15,14 @@ const STATUS_LABELS: Record<AgentInfo["status"], string> = {
   ended: "ENDED",
 };
 
+const THRESHOLD_OPTIONS = [
+  { label: "5m", value: 5 },
+  { label: "30m", value: 30 },
+  { label: "1h", value: 60 },
+  { label: "6h", value: 360 },
+  { label: "24h", value: 1440 },
+];
+
 function formatDuration(ms: number): string {
   if (ms < 60000) return "<1m";
   if (ms < 3600000) return Math.floor(ms / 60000) + "m";
@@ -25,16 +33,37 @@ function formatDuration(ms: number): string {
 
 interface AgentPanelProps {
   agents: AgentInfo[];
+  threshold: number;
+  onThresholdChange: (value: number) => void;
   onSelectSession: (sid: string) => void;
   onGenerateSummary: (sid: string) => void;
   onOpenTmux: (sid: string) => void;
 }
 
-export function AgentPanel({ agents, onSelectSession, onGenerateSummary, onOpenTmux }: AgentPanelProps) {
+export function AgentPanel({ agents, threshold, onThresholdChange, onSelectSession, onGenerateSummary, onOpenTmux }: AgentPanelProps) {
+  const activeCount = agents.filter(a => a.status === "active").length;
+  const idleCount = agents.filter(a => a.status === "idle").length;
+
   return (
     <>
-      <div style={{ padding: "4px 8px", borderBottom: "1px solid #21262d", fontSize: 11, color: "#8b949e" }}>
-        {agents.length} agents
+      <div className="agent-toolbar">
+        <span className="agent-counts">
+          <span style={{ color: "#3fb950" }}>{activeCount} active</span>
+          {" / "}
+          <span style={{ color: "#d29922" }}>{idleCount} idle</span>
+        </span>
+        <span className="agent-threshold">
+          active &lt;
+          <select
+            value={threshold}
+            onChange={(e) => onThresholdChange(Number(e.target.value))}
+            className="agent-threshold-select"
+          >
+            {THRESHOLD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </span>
       </div>
       <div className="panel-body">
         {!agents.length ? (
