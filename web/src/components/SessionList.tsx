@@ -51,7 +51,7 @@ export function SessionList({
     });
   }, [sessions, searchQuery]);
 
-  const sorted = sortSessions(filteredSessions);
+  const sorted = useMemo(() => sortSessions(filteredSessions), [filteredSessions]);
 
   return (
     <div className="panel" style={maximized ? { flex: 1, minHeight: 0 } : { height: height ?? 200, flexShrink: 0 }}>

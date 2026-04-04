@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { LogEvent, Summary } from "../types";
 import { ToolUsage } from "./ToolUsage";
 import { SkillUsage } from "./SkillUsage";
@@ -16,7 +16,7 @@ interface LeftTabsProps {
 
 export function LeftTabs({ summary, events, onScrollToEvent, maximized, onToggleMaximize }: LeftTabsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("tools");
-  const orphanIds = new Set(summary.orphanIds || []);
+  const orphanIds = useMemo(() => new Set(summary.orphanIds || []), [summary.orphanIds]);
 
   return (
     <div className="panel" style={{ flex: 1, minHeight: 0 }}>

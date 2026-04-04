@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { LogEvent } from "../types";
 import { EVENT_TYPES } from "../utils/constants";
 import { formatRelativeTime, formatAbsTime, truncate } from "../utils/format";
@@ -41,7 +42,7 @@ function escHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export function EventRow({
+export const EventRow = memo(function EventRow({
   event: ev,
   index,
   isOrphan,
@@ -85,4 +86,4 @@ export function EventRow({
       </span>
     </div>
   );
-}
+});
