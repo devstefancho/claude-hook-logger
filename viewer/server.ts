@@ -282,7 +282,19 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
       if (!session) return sendJson(res, { error: "Session not found" }, 404);
 
       try {
-        // Find tmux pane containing this pid (or child process)
+        // Build set of ancestor PIDs from agent PID up to init
+        const ancestorPids = new Set<number>();
+        let currentPid = session.pid;
+        while (currentPid && currentPid > 1) {
+          ancestorPids.add(currentPid);
+          try {
+            const ppid = parseInt(execSync(`ps -o ppid= -p ${currentPid}`, { encoding: "utf-8" }).trim());
+            if (ppid === currentPid || ppid <= 1) break;
+            currentPid = ppid;
+          } catch { break; }
+        }
+
+        // Find tmux pane whose PID is in the ancestor chain
         const panes = execSync("tmux list-panes -a -F '#{pane_pid} #{session_name} #{window_index}'", { encoding: "utf-8" });
         let targetSession: string | null = null;
         let targetWindow: string | null = null;
@@ -290,21 +302,11 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
           const parts = line.trim().split(" ");
           if (parts.length >= 3) {
             const panePid = parseInt(parts[0]);
-            // Check if this pane's pid matches or is a parent of the agent's pid
-            if (panePid === session.pid) {
+            if (ancestorPids.has(panePid)) {
               targetSession = parts[1];
               targetWindow = parts[2];
               break;
             }
-            // Check if the agent pid is a child of this pane
-            try {
-              const children = execSync(`pgrep -P ${panePid}`, { encoding: "utf-8" }).trim().split("\n");
-              if (children.includes(String(session.pid))) {
-                targetSession = parts[1];
-                targetWindow = parts[2];
-                break;
-              }
-            } catch { /* no children */ }
           }
         }
         if (targetSession && targetWindow) {

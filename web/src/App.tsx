@@ -1,13 +1,14 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useLogData } from "./hooks/useLogData";
 import { useAutoRefresh } from "./hooks/useAutoRefresh";
 import { useAgents } from "./hooks/useAgents";
-import { Header } from "./components/Header";
-import { StatBar } from "./components/StatBar";
-import { SessionList } from "./components/SessionList";
-import { LeftTabs } from "./components/LeftTabs";
-import { EventTimeline } from "./components/EventTimeline";
+import { TopBar } from "./components/TopBar";
+import { Sidebar } from "./components/Sidebar";
+import { DetailPanel } from "./components/DetailPanel";
 import { ChatPanel } from "./components/ChatPanel";
+
+export type SidebarView = "agents" | "tools" | "skills" | "events";
+export type LayoutMode = "full" | "compact" | "focus";
 
 export function App() {
   const {
@@ -31,18 +32,12 @@ export function App() {
   const { enabled: autoRefresh, toggle: toggleAutoRefresh } =
     useAutoRefresh(refreshAll);
 
+  const [activeView, setActiveView] = useState<SidebarView>("agents");
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("full");
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
   const [highlightIdx, setHighlightIdx] = useState<number | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
-
-  // Resize state
-  const [leftWidthPercent, setLeftWidthPercent] = useState(40);
-  const [sessionListHeight, setSessionListHeight] = useState(200);
-  const [maximizedPanel, setMaximizedPanel] = useState<"sessions" | "leftTabs" | "timeline" | null>(null);
-  const mainRef = useRef<HTMLDivElement>(null);
-  const leftRef = useRef<HTMLDivElement>(null);
-  const verticalDragging = useRef(false);
-  const horizontalDragging = useRef(false);
 
   useEffect(() => {
     loadFiles().then(() => {
@@ -51,22 +46,66 @@ export function App() {
     });
   }, [loadFiles, loadData, loadAgents]);
 
+  // Keyboard shortcuts for view switching
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT") return;
+      const viewMap: Record<string, SidebarView> = { "1": "agents", "2": "tools", "3": "skills", "4": "events" };
+      const view = viewMap[e.key];
+      if (view) setActiveView(view);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const handleSelectSession = useCallback((sid: string) => {
     setSelectedSession((prev) => (prev === sid ? null : sid));
   }, []);
 
-  const handleFilterBySession = useCallback(
-    (sid: string) => {
-      if (!sid) return;
-      setSelectedSession((prev) => (prev === sid ? null : sid));
-      const el = document.getElementById(`sess-${sid.slice(0, 8)}`);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    },
-    [],
-  );
+  const handleFilterBySession = useCallback((_sid: string) => {
+    // Just switch to events view - selectedSessions are already set
+    setActiveView("events");
+  }, []);
+
+  const handleToggleSessionFilter = useCallback((sid: string) => {
+    setSelectedSessions((prev) => {
+      const next = new Set(prev);
+      if (next.has(sid)) next.delete(sid);
+      else next.add(sid);
+      return next;
+    });
+  }, []);
 
   const clearSessionFilter = useCallback(() => {
     setSelectedSession(null);
+    setSelectedSessions(new Set());
+  }, []);
+
+  const handleToolClick = useCallback((toolName: string) => {
+    setActiveView("events");
+    // The EventTimeline will pick up the search from URL or we set it via state
+    // For simplicity, we store a search hint that EventTimeline can use
+    setTimeout(() => {
+      const searchInput = document.querySelector<HTMLInputElement>(".search-input");
+      if (searchInput) {
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeInputValueSetter?.call(searchInput, toolName);
+        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }, 50);
+  }, []);
+
+  const handleSkillClick = useCallback((skillName: string) => {
+    setActiveView("events");
+    setTimeout(() => {
+      const searchInput = document.querySelector<HTMLInputElement>(".search-input");
+      if (searchInput) {
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        nativeInputValueSetter?.call(searchInput, skillName);
+        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }, 50);
   }, []);
 
   const scrollToEvent = useCallback((idx: number) => {
@@ -80,75 +119,14 @@ export function App() {
     setTimeout(() => setHighlightIdx(null), 2000);
   }, []);
 
-  const toggleMaximize = useCallback(
-    (panel: "sessions" | "leftTabs" | "timeline") => {
-      setMaximizedPanel((prev) => (prev === panel ? null : panel));
-    },
-    [],
-  );
-
-  const onVerticalResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    verticalDragging.current = true;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!verticalDragging.current || !mainRef.current) return;
-      const rect = mainRef.current.getBoundingClientRect();
-      const padding = 20;
-      const handleWidth = 16;
-      const availableWidth = rect.width - padding * 2 - handleWidth;
-      const offsetX = ev.clientX - rect.left - padding;
-      const pct = Math.min(70, Math.max(20, (offsetX / availableWidth) * 100));
-      setLeftWidthPercent(pct);
-    };
-
-    const onMouseUp = () => {
-      verticalDragging.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  }, []);
-
-  const onHorizontalResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    horizontalDragging.current = true;
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!horizontalDragging.current || !leftRef.current) return;
-      const rect = leftRef.current.getBoundingClientRect();
-      const offsetY = ev.clientY - rect.top;
-      const newHeight = Math.min(rect.height - 100, Math.max(80, offsetY));
-      setSessionListHeight(newHeight);
-    };
-
-    const onMouseUp = () => {
-      horizontalDragging.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-  }, []);
-
   return (
     <>
-      <Header
+      <TopBar
         files={files}
         currentFile={currentFile}
         onFileChange={(f) => {
           setSelectedSession(null);
+          setSelectedSessions(new Set());
           selectFile(f);
         }}
         onRefresh={() => loadData()}
@@ -156,99 +134,40 @@ export function App() {
         onToggleAutoRefresh={toggleAutoRefresh}
         chatOpen={chatOpen}
         onToggleChat={() => setChatOpen((v) => !v)}
+        layoutMode={layoutMode}
+        onLayoutChange={setLayoutMode}
+        activeView={activeView}
+        onChangeView={setActiveView}
       />
-      <StatBar summary={summary} />
-      <div className="main" ref={mainRef}>
-        {maximizedPanel === "sessions" ? (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <SessionList
-              sessions={summary.sessions}
-              selectedSession={selectedSession}
-              onSelectSession={handleSelectSession}
-              onClearFilter={clearSessionFilter}
-              maximized
-              onToggleMaximize={() => toggleMaximize("sessions")}
-            />
-          </div>
-        ) : maximizedPanel === "leftTabs" ? (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <LeftTabs
-              summary={summary}
-              events={events}
-              onScrollToEvent={scrollToEvent}
-              maximized
-              onToggleMaximize={() => toggleMaximize("leftTabs")}
-              agents={agents}
-              onGenerateSummary={generateSummary}
-              onOpenTmux={openInTmux}
-              onSelectSession={handleSelectSession}
-            />
-          </div>
-        ) : maximizedPanel === "timeline" ? (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-            <EventTimeline
-              events={events}
-              summary={summary}
-              selectedSession={selectedSession}
-              onFilterBySession={handleFilterBySession}
-              onClearSessionFilter={clearSessionFilter}
-              highlightIdx={highlightIdx}
-              maximized
-              onToggleMaximize={() => toggleMaximize("timeline")}
-            />
-          </div>
-        ) : (
-          <>
-            <div
-              className="left"
-              ref={leftRef}
-              style={{ width: `${leftWidthPercent}%` }}
-            >
-              <SessionList
-                sessions={summary.sessions}
-                selectedSession={selectedSession}
-                onSelectSession={handleSelectSession}
-                onClearFilter={clearSessionFilter}
-                height={sessionListHeight}
-                onToggleMaximize={() => toggleMaximize("sessions")}
-              />
-              <div
-                className="resize-handle-horizontal"
-                onMouseDown={onHorizontalResizeMouseDown}
-              />
-              <LeftTabs
-                summary={summary}
-                events={events}
-                onScrollToEvent={scrollToEvent}
-                onToggleMaximize={() => toggleMaximize("leftTabs")}
-                agents={agents}
-                agentThreshold={threshold}
-                onAgentThresholdChange={setThreshold}
-                onGenerateSummary={generateSummary}
-                onOpenTmux={openInTmux}
-                onSelectSession={handleSelectSession}
-              />
-            </div>
-            <div
-              className="resize-handle-vertical"
-              onMouseDown={onVerticalResizeMouseDown}
-            />
-            <div
-              className="right"
-              style={{ width: `${100 - leftWidthPercent}%` }}
-            >
-              <EventTimeline
-                events={events}
-                summary={summary}
-                selectedSession={selectedSession}
-                onFilterBySession={handleFilterBySession}
-                onClearSessionFilter={clearSessionFilter}
-                highlightIdx={highlightIdx}
-                onToggleMaximize={() => toggleMaximize("timeline")}
-              />
-            </div>
-          </>
-        )}
+      <div className="app-body">
+        <Sidebar
+          activeView={activeView}
+          onChangeView={setActiveView}
+          summary={summary}
+          agents={agents}
+          layoutMode={layoutMode}
+        />
+        <DetailPanel
+          activeView={activeView}
+          agents={agents}
+          sessions={summary.sessions}
+          summary={summary}
+          events={events}
+          selectedSession={selectedSession}
+          selectedSessions={selectedSessions}
+          onSelectSession={handleSelectSession}
+          onFilterBySession={handleFilterBySession}
+          onToggleSessionFilter={handleToggleSessionFilter}
+          onClearSessionFilter={clearSessionFilter}
+          highlightIdx={highlightIdx}
+          onScrollToEvent={scrollToEvent}
+          onGenerateSummary={generateSummary}
+          onOpenTmux={openInTmux}
+          onToolClick={handleToolClick}
+          onSkillClick={handleSkillClick}
+          threshold={threshold}
+          onThresholdChange={setThreshold}
+        />
       </div>
       <ChatPanel
         open={chatOpen}

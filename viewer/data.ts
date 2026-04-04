@@ -161,7 +161,10 @@ export function buildSummary(events: LogEvent[]): Summary {
       postToolIds.add(toolUseId);
     }
 
-    if (ev.event === "SessionStart") sess.hasSessionStart = true;
+    if (ev.event === "SessionStart") {
+      sess.hasSessionStart = true;
+      sess.hasSessionEnd = false; // Reset on resume
+    }
     if (ev.event === "SessionEnd") sess.hasSessionEnd = true;
 
     if (ev.event === "Stop" && ev.data?.stop_hook_active) {
