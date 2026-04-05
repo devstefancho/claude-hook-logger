@@ -404,14 +404,12 @@ export function getRecentPrompts(sessionId: string, cwd: string, count = 3): str
   return prompts.slice(-count);
 }
 
-function extractProjectName(cwd: string): string {
+export function extractProjectName(cwd: string): string {
   const home = process.env.HOME || "";
-  const relative = cwd.startsWith(home) ? cwd.slice(home.length + 1) : cwd;
-  const parts = relative.split("/");
-  if (parts.length > 3) {
-    return parts.slice(-3).join("/");
+  if (home && (cwd === home || cwd.startsWith(home + "/"))) {
+    return "~" + cwd.slice(home.length);
   }
-  return relative;
+  return cwd;
 }
 
 export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, ClaudeSession>, options: { includeEnded?: boolean; thresholdMs?: number } = {}): AgentInfo[] {
