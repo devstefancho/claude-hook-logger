@@ -56,6 +56,7 @@
 | Session 데이터 병합 | ✅ | interrupt/orphan 정보 SessionInfo에서 가져옴 |
 | **빠진 기능** | ❌ | 카드 클릭으로 상세 확장/축소 없음 |
 | **빠진 기능** | ❌ | 정렬 옵션 없음 (항상 서버 응답 순) |
+| 경로 표시 | ✅ | HOME을 ~/로 축약한 전체 절대경로 표시 (extractProjectName) |
 | **빠진 기능** | ❌ | 삭제된 Issues 컴포넌트의 "click-to-scroll" 기능 미복구 |
 
 ### 4. ToolsView (Tools 탭)
@@ -153,4 +154,17 @@ useChat()     → SSE streaming (POST /api/chat)
 - **tmux ancestor 탐색**: PID 부모 체인 역추적으로 안정적 tmux 매칭 구현
 - **Session resume 감지**: SessionEnd 후 SessionStart 시 hasSessionEnd 리셋 구현
 
+---
+
+## Electron App 지원
+
+| 기능 | 상태 | 설명 |
+|---|---|---|
+| 메인 프로세스 | ✅ | `electron/main.cts` — 내장 서버 + BrowserWindow |
+| preload 스크립트 | ✅ | `electron/preload.cts` — electronAPI 노출 |
+| dev 모드 | ✅ | `ELECTRON_DEV=1` 환경변수로 Vite dev server(5188) 연결 |
+| prod 빌드 | ✅ | `electron:build` 명령어로 macOS .app 패키징 |
+| 기존 웹 버전 호환 | ✅ | `just viewer`로 기존 방식 그대로 동작 |
+
+상세 스펙은 [specs/electron-app.md](electron-app.md) 참조.
 향후 아이디어는 [specs/ideas.md](ideas.md) 참조.

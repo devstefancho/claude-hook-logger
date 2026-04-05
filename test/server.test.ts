@@ -683,3 +683,79 @@ describe("HTTP endpoints – webDir serving", () => {
     assert.ok(Array.isArray(body.files));
   });
 });
+
+// ---------------------------------------------------------------------------
+// 8. HTTP endpoint tests – /api/agents
+// ---------------------------------------------------------------------------
+describe("HTTP endpoints – /api/agents", () => {
+  let tmpDir: string;
+  let htmlPath: string;
+  let server: import("node:http").Server;
+  let baseUrl: string;
+  let originalHome: string | undefined;
+
+  before(async () => {
+    tmpDir = makeTmpDir();
+    htmlPath = writeTmpHtml(tmpDir);
+    originalHome = process.env.HOME;
+    process.env.HOME = tmpDir;
+
+    // Create sessions dir
+    fs.mkdirSync(path.join(tmpDir, ".claude", "sessions"), { recursive: true });
+
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: "2024-01-01T00:00:00Z", cwd: "/project" },
+      { event: "PreToolUse", session_id: "s1", ts: "2024-01-01T00:00:01Z", data: { tool_name: "Read", tool_use_id: "t1" } },
+      { event: "PostToolUse", session_id: "s1", ts: "2024-01-01T00:00:02Z", data: { tool_name: "Read", tool_use_id: "t1" } },
+      { event: "SessionEnd", session_id: "s1", ts: "2024-01-01T00:00:03Z" },
+    ];
+    writeJsonl(tmpDir, "hook-events.jsonl", events);
+
+    ({ server, baseUrl } = await startServer(tmpDir, htmlPath));
+  });
+
+  after(async () => {
+    await stopServer(server);
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("GET /api/agents returns 200 with agents array", async () => {
+    const { status, body } = await fetchJson(baseUrl, "/api/agents");
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(body.agents));
+  });
+
+  it("GET /api/agents?includeEnded=true includes ended sessions", async () => {
+    const { status, body } = await fetchJson(baseUrl, "/api/agents?includeEnded=true");
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(body.agents));
+    assert.ok((body.agents as unknown[]).length > 0);
+  });
+
+  it("GET /api/agents?threshold=60 respects threshold parameter", async () => {
+    const { status, body } = await fetchJson(baseUrl, "/api/agents?threshold=60");
+    assert.equal(status, 200);
+    assert.ok(Array.isArray(body.agents));
+  });
+
+  it("GET /api/summary returns 200 with summary", async () => {
+    const { status, body } = await fetchJson(baseUrl, "/api/summary");
+    assert.equal(status, 200);
+    assert.equal(body.totalEvents, 4);
+  });
+
+  it("POST /api/agents/nonexistent/summary returns 404", async () => {
+    const res = await fetch(`${baseUrl}/api/agents/nonexistent/summary`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const body = await res.json();
+    assert.equal(res.status, 404);
+    assert.ok((body as { error: string }).error);
+  });
+});

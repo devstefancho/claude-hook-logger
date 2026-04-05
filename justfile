@@ -60,6 +60,16 @@ analyze *args:
 dev: build
     pnpm run dev:server
 
+# --- Electron ---
+
+# Electron 개발 모드 (사전에 just dev-server 실행 필요, 포트 5188)
+electron-dev:
+    pnpm run electron:build:ts && pnpm run electron:dev
+
+# Electron macOS 앱 빌드
+app:
+    pnpm run electron:build
+
 # --- Utilities ---
 
 # dist/ 삭제 → rm -rf dist/
