@@ -22,7 +22,7 @@ export function App() {
     selectFile,
   } = useLogData();
 
-  const { agents, loadAgents, generateSummary, openInTmux, threshold, setThreshold } = useAgents();
+  const { agents, teamGroups, ungroupedAgents, loadAgents, generateSummary, openInTmux, threshold, setThreshold } = useAgents();
 
   const refreshAll = useCallback(async () => {
     await checkForUpdates();
@@ -150,6 +150,8 @@ export function App() {
         <DetailPanel
           activeView={activeView}
           agents={agents}
+          teamGroups={teamGroups}
+          ungroupedAgents={ungroupedAgents}
           sessions={summary.sessions}
           summary={summary}
           events={events}

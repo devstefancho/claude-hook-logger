@@ -67,6 +67,25 @@ export interface AgentInfo {
   pid: number | null;
 }
 
+export interface TeamMember {
+  agentId: string;
+  name: string;
+  agentType?: string;
+  model?: string;
+  cwd?: string;
+  tmuxPaneId?: string;
+  sessionId?: string;
+  joinedAt?: number;
+}
+
+export interface TeamInfo {
+  name: string;
+  description: string;
+  createdAt: number;
+  leadSessionId: string;
+  members: TeamMember[];
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;

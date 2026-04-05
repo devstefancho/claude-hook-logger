@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 const BUILTIN_COMMANDS = new Set([
   // Official docs (code.claude.com/docs/en/interactive-mode)
@@ -496,6 +497,171 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
   });
 
   return agents;
+}
+
+// --- Team data ---
+
+export interface TeamMember {
+  agentId: string;
+  name: string;
+  agentType?: string;
+  model?: string;
+  cwd?: string;
+  tmuxPaneId?: string;
+  sessionId?: string;
+  joinedAt?: number;
+}
+
+export interface TeamInfo {
+  name: string;
+  description: string;
+  createdAt: number;
+  leadSessionId: string;
+  members: TeamMember[];
+}
+
+interface SessionCandidate {
+  sessionId: string;
+  pid: number;
+  cwd: string;
+  mtime: number;
+}
+
+function getDescendantPids(pid: number): number[] {
+  const result: number[] = [];
+  try {
+    const children = execSync(`pgrep -P ${pid}`, {
+      encoding: "utf-8",
+      timeout: 2000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    for (const line of children.trim().split("\n")) {
+      const childPid = parseInt(line.trim(), 10);
+      if (!isNaN(childPid)) {
+        result.push(childPid);
+        result.push(...getDescendantPids(childPid));
+      }
+    }
+  } catch { /* no children */ }
+  return result;
+}
+
+export function getTeams(teamsDir: string, sessionsDir?: string): TeamInfo[] {
+  if (!fs.existsSync(teamsDir)) return [];
+
+  // Build session candidates from session files (PID → sessionId + cwd + mtime)
+  const pidToSessionId = new Map<number, string>();
+  const sessionCandidates: SessionCandidate[] = [];
+  if (sessionsDir && fs.existsSync(sessionsDir)) {
+    for (const file of fs.readdirSync(sessionsDir)) {
+      if (!file.endsWith(".json")) continue;
+      try {
+        const filePath = path.join(sessionsDir, file);
+        const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+        if (data.pid && data.sessionId) {
+          pidToSessionId.set(data.pid, data.sessionId);
+          const stat = fs.statSync(filePath);
+          sessionCandidates.push({
+            sessionId: data.sessionId,
+            pid: data.pid,
+            cwd: data.cwd || "",
+            mtime: stat.mtimeMs,
+          });
+        }
+      } catch {
+        // skip
+      }
+    }
+  }
+
+  // Build tmux paneId → panePid map (best-effort, tmux may not be available)
+  const panePidMap = new Map<string, number>();
+  try {
+    const paneOutput = execSync("tmux list-panes -a -F '#{pane_id} #{pane_pid}'", {
+      encoding: "utf-8",
+      timeout: 3000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    for (const line of paneOutput.split("\n")) {
+      const parts = line.trim().split(" ");
+      if (parts.length >= 2) {
+        panePidMap.set(parts[0], parseInt(parts[1], 10));
+      }
+    }
+  } catch {
+    // tmux not available
+  }
+
+  const teams: TeamInfo[] = [];
+  for (const dir of fs.readdirSync(teamsDir)) {
+    const configPath = path.join(teamsDir, dir, "config.json");
+    if (!fs.existsSync(configPath)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (!data.name || !Array.isArray(data.members)) continue;
+      const leadAgentId = (data.leadAgentId as string) || "";
+      const leadSessionId = (data.leadSessionId as string) || "";
+      const assignedSessionIds = new Set<string>();
+
+      const members: TeamMember[] = data.members.map((m: Record<string, unknown>) => {
+        const member: TeamMember = {
+          agentId: (m.agentId as string) || "",
+          name: (m.name as string) || "",
+          agentType: (m.agentType as string) || undefined,
+          model: (m.model as string) || undefined,
+          cwd: (m.cwd as string) || undefined,
+          tmuxPaneId: (m.tmuxPaneId as string) || undefined,
+          joinedAt: typeof m.joinedAt === "number" ? m.joinedAt : undefined,
+        };
+
+        // Resolve sessionId: lead member
+        if (member.agentId === leadAgentId) {
+          member.sessionId = leadSessionId;
+          assignedSessionIds.add(leadSessionId);
+        } else if (member.tmuxPaneId && panePidMap.has(member.tmuxPaneId)) {
+          // Resolve sessionId: tmux pane → recursive descendant PIDs → session file
+          const panePid = panePidMap.get(member.tmuxPaneId)!;
+          const descendantPids = getDescendantPids(panePid);
+          for (const childPid of descendantPids) {
+            const sid = pidToSessionId.get(childPid);
+            if (sid && !assignedSessionIds.has(sid)) {
+              member.sessionId = sid;
+              assignedSessionIds.add(sid);
+              break;
+            }
+          }
+        }
+
+        return member;
+      });
+
+      // Temporal matching fallback: for unresolved non-lead members with joinedAt
+      for (const member of members) {
+        if (member.sessionId || !member.joinedAt) continue;
+
+        // Find unassigned session candidates with matching cwd, closest mtime to joinedAt
+        const candidates = sessionCandidates
+          .filter((s) => !assignedSessionIds.has(s.sessionId) && member.cwd && s.cwd === member.cwd)
+          .sort((a, b) => Math.abs(a.mtime - member.joinedAt!) - Math.abs(b.mtime - member.joinedAt!));
+
+        if (candidates.length > 0) {
+          member.sessionId = candidates[0].sessionId;
+          assignedSessionIds.add(candidates[0].sessionId);
+        }
+      }
+
+      teams.push({
+        name: data.name,
+        description: data.description || "",
+        createdAt: data.createdAt || 0,
+        leadSessionId,
+        members,
+      });
+    } catch {
+      // skip malformed config
+    }
+  }
+  return teams;
 }
 
 // Summary cache for agent summaries

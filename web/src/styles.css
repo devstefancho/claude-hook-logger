@@ -511,6 +511,55 @@ body {
 }
 .cmd-btn:hover { border-color: var(--accent); color: var(--accent); }
 .cmd-btn.copied { border-color: var(--status-active); color: var(--status-active); }
+
+/* === TEAM GROUP === */
+.team-group {
+  margin-bottom: 8px;
+}
+.team-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s;
+}
+.team-group-header:hover {
+  background: var(--bg-surface);
+}
+.team-collapse-icon {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 12px;
+}
+.team-group-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.3px;
+}
+.team-group-count {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.team-group-status {
+  font-size: 10px;
+  margin-left: auto;
+}
+.agent-role-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
 .sort-select {
   font-family: var(--font-mono);
   font-size: 10px;

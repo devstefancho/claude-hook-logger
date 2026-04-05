@@ -1,4 +1,5 @@
 import type { LogEvent, Summary, AgentInfo, SessionInfo } from "../types";
+import type { TeamGroup } from "../hooks/useAgents";
 import type { SidebarView } from "../App";
 import { AgentsView } from "./AgentsView";
 import { ToolsView } from "./ToolsView";
@@ -8,6 +9,8 @@ import { EventTimeline } from "./EventTimeline";
 interface DetailPanelProps {
   activeView: SidebarView;
   agents: AgentInfo[];
+  teamGroups: TeamGroup[];
+  ungroupedAgents: AgentInfo[];
   sessions: SessionInfo[];
   summary: Summary;
   events: LogEvent[];
@@ -30,6 +33,8 @@ interface DetailPanelProps {
 export function DetailPanel({
   activeView,
   agents,
+  teamGroups,
+  ungroupedAgents,
   sessions,
   summary,
   events,
@@ -52,6 +57,8 @@ export function DetailPanel({
       {activeView === "agents" && (
         <AgentsView
           agents={agents}
+          teamGroups={teamGroups}
+          ungroupedAgents={ungroupedAgents}
           sessions={sessions}
           selectedSessions={selectedSessions}
           onSelectSession={onSelectSession}
