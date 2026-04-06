@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useUrlState } from "../hooks/useUrlState";
+import { serializeSet, deserializeSet } from "../hooks/url-state-core";
 import type { VariantType } from "../App";
 import type { AgentInfo, SessionInfo, TeamInfo } from "../types";
 import type { TeamGroup } from "../hooks/useAgents";
@@ -35,7 +36,7 @@ const THRESHOLD_OPTIONS = [
   { label: "24h", value: 1440 },
 ];
 
-type StatusFilter = "all" | AgentInfo["status"];
+type StatusValue = AgentInfo["status"];
 type SortBy = "status" | "activity" | "name";
 type ViewMode = "cards" | "compact" | "teams" | "split";
 
@@ -416,7 +417,15 @@ export function AgentsView({
   variant,
 }: AgentsViewProps) {
   const [searchQuery, setSearchQuery] = useUrlState<string>("agentSearch", "");
-  const [statusFilter, setStatusFilter] = useUrlState<StatusFilter>("status", "all");
+  const [statusFilterRaw, setStatusFilterRaw] = useUrlState<string>("status", "");
+  const statusFilter = useMemo(() => deserializeSet(statusFilterRaw), [statusFilterRaw]);
+  const setStatusFilter = useCallback((updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    if (typeof updater === "function") {
+      setStatusFilterRaw((prev) => serializeSet(updater(deserializeSet(prev))));
+    } else {
+      setStatusFilterRaw(serializeSet(updater));
+    }
+  }, [setStatusFilterRaw]);
   const [sortBy, setSortBy] = useUrlState<SortBy>("agentSort", "status");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
@@ -503,10 +512,10 @@ export function AgentsView({
     return map;
   }, [sessions]);
 
-  const filterAndSort = useCallback((list: AgentInfo[]) => {
+  const filterAndSort = useCallback((list: AgentInfo[], skipStatusFilter = false) => {
     let result = list;
-    if (statusFilter !== "all") {
-      result = result.filter((a) => a.status === statusFilter);
+    if (!skipStatusFilter && statusFilter.size > 0) {
+      result = result.filter((a) => statusFilter.has(a.status));
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -757,7 +766,7 @@ export function AgentsView({
                     />
                     {isExpanded && (
                       <div className="team-inline-members">
-                        {filteredAgents.map((agent) => renderAgentByStatus(agent, group.team))}
+                        {filterAndSort(group.agents, true).map((agent) => renderAgentByStatus(agent, group.team))}
                       </div>
                     )}
                   </div>
@@ -972,13 +981,24 @@ export function AgentsView({
   const renderControls = () => (
     <div className="view-controls">
       <div className="status-filters">
-        {(["all", "active", "idle", "waiting", "ended"] as StatusFilter[]).map((s) => (
+        <button
+          className={`filter-pill${statusFilter.size === 0 ? " active" : ""}`}
+          onClick={() => setStatusFilter(new Set())}
+        >
+          All
+        </button>
+        {(["active", "idle", "waiting", "ended"] as StatusValue[]).map((s) => (
           <button
             key={s}
-            className={`filter-pill${statusFilter === s ? " active" : ""}`}
-            onClick={() => setStatusFilter(s)}
+            className={`filter-pill${statusFilter.has(s) ? " active" : ""}`}
+            onClick={() => setStatusFilter((prev) => {
+              const next = new Set(prev);
+              if (next.has(s)) next.delete(s);
+              else next.add(s);
+              return next;
+            })}
           >
-            {s === "all" ? "All" : STATUS_LABELS[s]}
+            {STATUS_LABELS[s]}
           </button>
         ))}
       </div>
