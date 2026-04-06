@@ -17,3 +17,8 @@ focus 모드 진입 시 TopBar에 인라인 탭 바를 조건부 렌더링한다
 - Full/compact 모드에서는 TopBar에 뷰 전환 탭이 표시되지 않음
 - 숫자키 1-4로 뷰 전환이 동작하고, 검색 입력 중에는 무시됨
 - 뷰 전환 시 DetailPanel 콘텐츠가 올바르게 변경됨
+
+## Implementation Status
+- [x] Focus 모드에서 TopBar 인라인 탭 바 조건부 렌더링
+- [x] 키보드 단축키 1/2/3/4로 뷰 전환 (입력 필드 포커스 시 무시)
+- [x] 활성 뷰 시각적 표시

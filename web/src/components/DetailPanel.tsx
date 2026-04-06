@@ -1,5 +1,6 @@
 import type { LogEvent, Summary, AgentInfo, SessionInfo } from "../types";
-import type { SidebarView } from "../App";
+import type { TeamGroup } from "../hooks/useAgents";
+import type { SidebarView, VariantType } from "../App";
 import { AgentsView } from "./AgentsView";
 import { ToolsView } from "./ToolsView";
 import { SkillsView } from "./SkillsView";
@@ -8,6 +9,8 @@ import { EventTimeline } from "./EventTimeline";
 interface DetailPanelProps {
   activeView: SidebarView;
   agents: AgentInfo[];
+  teamGroups: TeamGroup[];
+  ungroupedAgents: AgentInfo[];
   sessions: SessionInfo[];
   summary: Summary;
   events: LogEvent[];
@@ -23,6 +26,9 @@ interface DetailPanelProps {
   onOpenTmux: (sid: string) => void;
   onToolClick: (name: string) => void;
   onSkillClick: (name: string) => void;
+  loading: boolean;
+  viewResetKey: number;
+  variant: VariantType;
   threshold: number;
   onThresholdChange: (value: number) => void;
 }
@@ -30,6 +36,8 @@ interface DetailPanelProps {
 export function DetailPanel({
   activeView,
   agents,
+  teamGroups,
+  ungroupedAgents,
   sessions,
   summary,
   events,
@@ -40,6 +48,9 @@ export function DetailPanel({
   onToggleSessionFilter,
   onClearSessionFilter,
   highlightIdx,
+  loading,
+  viewResetKey,
+  variant,
   onGenerateSummary,
   onOpenTmux,
   onToolClick,
@@ -52,7 +63,11 @@ export function DetailPanel({
       {activeView === "agents" && (
         <AgentsView
           agents={agents}
+          teamGroups={teamGroups}
+          ungroupedAgents={ungroupedAgents}
           sessions={sessions}
+          loading={loading}
+          viewResetKey={viewResetKey}
           selectedSessions={selectedSessions}
           onSelectSession={onSelectSession}
           onToggleSessionFilter={onToggleSessionFilter}
@@ -62,6 +77,7 @@ export function DetailPanel({
           onOpenTmux={onOpenTmux}
           threshold={threshold}
           onThresholdChange={onThresholdChange}
+          variant={variant}
         />
       )}
       {activeView === "tools" && (

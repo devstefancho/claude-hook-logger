@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useUrlState } from "./useUrlState";
 import type { LogEvent, Summary } from "../types";
 
 const emptySummary: Summary = {
@@ -17,7 +18,7 @@ const emptySummary: Summary = {
 
 export function useLogData() {
   const [files, setFiles] = useState<string[]>([]);
-  const [currentFile, setCurrentFile] = useState("hook-events.jsonl");
+  const [currentFile, setCurrentFile] = useUrlState<string>("file", "hook-events.jsonl");
   const [events, setEvents] = useState<LogEvent[]>([]);
   const [summary, setSummary] = useState<Summary>(emptySummary);
   const [lastEventCount, setLastEventCount] = useState(0);

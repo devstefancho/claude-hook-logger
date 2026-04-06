@@ -54,10 +54,14 @@
 | summary 액션 | ✅ | AI 요약 생성 (서버 API 호출) |
 | filter 액션 | ✅ | 클릭 시 Events 뷰로 전환 + 세션 필터링 |
 | Session 데이터 병합 | ✅ | interrupt/orphan 정보 SessionInfo에서 가져옴 |
-| **빠진 기능** | ❌ | 카드 클릭으로 상세 확장/축소 없음 |
-| **빠진 기능** | ❌ | 정렬 옵션 없음 (항상 서버 응답 순) |
+| 카드 확장/축소 | ✅ | Compact(List) 뷰 모드에서 AgentMiniCard 클릭 → accordion 펼치기/접기 |
+| 정렬 옵션 | ✅ | Status / Activity / Name 정렬 드롭다운 |
 | 경로 표시 | ✅ | HOME을 ~/로 축약한 전체 절대경로 표시 (extractProjectName) |
-| **빠진 기능** | ❌ | 삭제된 Issues 컴포넌트의 "click-to-scroll" 기능 미복구 |
+| 팀 그룹화 | ✅ | 같은 agent team 멤버를 그룹으로 묶어 표시 (팀 헤더 + 역할 배지) |
+| 팀 Dashboard Card | ✅ | TeamDashboardCard로 팀 overview 표시 (이름, status dots, active/idle count, 최근 활동) |
+| 팀 Drill-down | ✅ | 팀 카드 클릭 → selectedTeam state → Detail view (Back 버튼 + Escape 복귀) |
+| Ungrouped 섹션 | ✅ | 팀에 속하지 않은 독립 세션 별도 표시 |
+| ViewMode 토글 | ✅ | Grid(▦) / List(≡) / Team(⊞) / Split(◫) 4개 뷰 모드 전환 |
 
 ### 4. ToolsView (Tools 탭)
 
@@ -113,7 +117,7 @@
 
 ```
 useLogData()  → files, events, summary (GET /api/events, /api/summary)
-useAgents()   → agents (GET /api/agents?threshold=N)
+useAgents()   → agents, teamGroups (GET /api/agents?threshold=N + GET /api/teams)
 useAutoRefresh() → 5초 간격 checkForUpdates + loadAgents
 useChat()     → SSE streaming (POST /api/chat)
 ```
@@ -128,6 +132,7 @@ useChat()     → SSE streaming (POST /api/chat)
 | GET | /api/agents?threshold=N | 에이전트 목록 |
 | POST | /api/agents/:id/summary | AI 요약 생성 |
 | POST | /api/agents/:id/open-tmux | tmux 윈도우 전환 |
+| GET | /api/teams | 에이전트 팀 목록 (config.json 기반) |
 | POST | /api/chat | Claude Agent SDK 채팅 |
 
 ---
@@ -153,6 +158,10 @@ useChat()     → SSE streaming (POST /api/chat)
 - **필드별 검색**: All/Tool name/Event type/Session ID/Data 검색 필드 선택 구현
 - **tmux ancestor 탐색**: PID 부모 체인 역추적으로 안정적 tmux 매칭 구현
 - **Session resume 감지**: SessionEnd 후 SessionStart 시 hasSessionEnd 리셋 구현
+- **Agent 팀 그룹화**: 같은 team 멤버를 그룹으로 묶어 표시 + 역할 배지 + 접기/펼치기
+- **Team Dashboard Card + Drill-down** (Case 2): TeamDashboardCard overview + selectedTeam drill-down + Escape 복귀 구현
+- **AgentsView 4-mode ViewMode 구현** (Case 1~5 통합): Grid(cards) / List(compact=accordion) / Team(dashboard overview+drill-down) / Split(좌우 분할) 4개 뷰 모드 토글 완료
+- **포트 충돌 자동 해결**: `just kill` 레시피 추가 + `just dev`에서 자동 포트 정리, `viewer/start.ts` EADDRINUSE 시 기존 프로세스 kill 후 재시도
 
 ---
 

@@ -10,7 +10,7 @@
     "build": "tsc -p tsconfig.json && vite build --config web/vite.config.ts && cp viewer/index.html dist/viewer/",
     "build:check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p web/tsconfig.json",
     "test": "node --import tsx/esm --experimental-test-module-mocks --test 'test/**/*.test.ts'",
-    "test:coverage": "node --import tsx/esm --experimental-test-module-mocks --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-exclude='lib/settings-merge-cli.ts' --test-coverage-exclude='viewer/start.ts' 'test/**/*.test.ts'",
+    "test:coverage": "npx c8 --include='lib/**' --include='viewer/**' --include='web/src/hooks/url-state-core.ts' --exclude='test/**' --exclude='lib/settings-merge-cli.ts' --exclude='viewer/start.ts' node --import tsx/esm --experimental-test-module-mocks --test 'test/**/*.test.ts'",
     "electron:build:ts": "tsc -p electron/tsconfig.json",
     "electron:dev": "ELECTRON_DEV=1 electron dist/electron/main.cjs",
     "electron:start": "electron dist/electron/main.cjs",
@@ -40,7 +40,9 @@
     "productName": "Claude Hook Logger",
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "files": [
       "dist/**/*",
@@ -61,6 +63,7 @@
     }
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

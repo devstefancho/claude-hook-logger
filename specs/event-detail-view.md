@@ -17,3 +17,9 @@ selectedSession을 단일 string에서 Set<string>으로 변경하여 복수 세
 - 필드 지정 검색(예: tool name = "Read")이 전체 검색과 독립적으로 동작함
 - 이벤트 행 클릭 시 상세 JSON이 펼쳐지고 다시 클릭하면 접힘
 - 시간 범위 필터 변경 시 해당 범위의 이벤트만 표시됨
+
+## Implementation Status
+- [x] 필드별 검색 드롭다운 (All / Tool name / Event type / Session ID / Data)
+- [x] 복수 세션 필터링 (`selectedSessions` Set<string>)
+- [x] 이벤트 행 클릭 → JSON 상세 펼치기/접기 (accordion)
+- [x] 시간 범위 필터 (All / 1h / 6h / 24h)

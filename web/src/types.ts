@@ -65,6 +65,28 @@ export interface AgentInfo {
   summary: string | null;
   recentPrompts: string[];
   pid: number | null;
+  justCompleted: boolean;
+  permissionMessage: string | null;
+  latestUserPrompt: string | null;
+}
+
+export interface TeamMember {
+  agentId: string;
+  name: string;
+  agentType?: string;
+  model?: string;
+  cwd?: string;
+  tmuxPaneId?: string;
+  sessionId?: string;
+  joinedAt?: number;
+}
+
+export interface TeamInfo {
+  name: string;
+  description: string;
+  createdAt: number;
+  leadSessionId: string;
+  members: TeamMember[];
 }
 
 export interface ChatMessage {

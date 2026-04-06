@@ -1,4 +1,4 @@
-import type { LayoutMode, SidebarView } from "../App";
+import type { LayoutMode, SidebarView, VariantType } from "../App";
 
 interface TopBarProps {
   files: string[];
@@ -13,6 +13,11 @@ interface TopBarProps {
   onLayoutChange: (mode: LayoutMode) => void;
   activeView: SidebarView;
   onChangeView: (view: SidebarView) => void;
+  variant: VariantType;
+  onVariantChange: (variant: VariantType) => void;
+  feedOpen?: boolean;
+  onToggleFeed?: () => void;
+  feedUnreadCount?: number;
 }
 
 const LAYOUT_ICONS: Record<LayoutMode, string> = {
@@ -47,6 +52,11 @@ export function TopBar({
   onLayoutChange,
   activeView,
   onChangeView,
+  variant,
+  onVariantChange,
+  feedOpen,
+  onToggleFeed,
+  feedUnreadCount,
 }: TopBarProps) {
   const nextMode = (): LayoutMode => {
     if (layoutMode === "full") return "compact";
@@ -98,6 +108,25 @@ export function TopBar({
         >
           Auto {autoRefresh ? "ON" : "OFF"}
         </button>
+        <select
+          className="topbar-select variant-select"
+          value={variant}
+          onChange={(e) => onVariantChange(e.target.value as VariantType)}
+          title="Status display variant"
+        >
+          <option value="a">A: Inline</option>
+          <option value="b">B: Overlay</option>
+          <option value="c">C: Feed</option>
+        </select>
+        {variant === "c" && onToggleFeed && (
+          <button
+            className={`topbar-btn${feedOpen ? " active" : ""}`}
+            onClick={onToggleFeed}
+            title="Activity Feed"
+          >
+            &#128276;{feedUnreadCount ? <span className="feed-badge">{feedUnreadCount}</span> : null}
+          </button>
+        )}
         <button
           className={`topbar-btn${chatOpen ? " active" : ""}`}
           onClick={onToggleChat}

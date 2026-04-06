@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
+import { useUrlState } from "../hooks/useUrlState";
 import type { ToolUsageEntry } from "../types";
 
 type SortBy = "count" | "az" | "za";
@@ -9,9 +10,9 @@ interface SkillsViewProps {
 }
 
 export function SkillsView({ skills, onSkillClick }: SkillsViewProps) {
-  const [sortBy, setSortBy] = useState<SortBy>("count");
-  const [search, setSearch] = useState("");
-  const [minCount, setMinCount] = useState(1);
+  const [sortBy, setSortBy] = useUrlState<SortBy>("skillSort", "count");
+  const [search, setSearch] = useUrlState<string>("skillSearch", "");
+  const [minCount, setMinCount] = useUrlState<number>("skillMin", 1);
 
   const processed = useMemo(() => {
     let list = skills;

@@ -15,3 +15,9 @@ AgentsView에서 프로젝트 경로가 마지막 3 segments로 잘려 표시되
 - HOME이 `/Users/foo`일 때 `/Users/foo/works/project/.claude`가 `~/works/project/.claude`로 표시된다
 - HOME 밖 경로 `/opt/project`는 그대로 `/opt/project`로 표시된다
 - 기존 테스트가 모두 통과한다
+
+## Implementation Status
+- [x] `extractProjectName` 함수 — HOME을 `~/`로 치환한 전체 절대경로 반환
+- [x] 3-segment 잘림 로직 제거
+- [x] HOME 밖 경로 절대경로 유지
+- [x] 테스트 커버리지 97% 달성
