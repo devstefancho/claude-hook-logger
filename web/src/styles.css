@@ -406,6 +406,17 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.agent-name-unnamed {
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-weight: 400;
+}
+.agent-name-unnamed-hint {
+  font-size: 10px;
+  font-style: italic;
+  color: var(--text-muted);
+  margin-left: 4px;
+  font-family: inherit;
+}
 .agent-badge-v2 {
   font-size: 9px;
   font-weight: 700;
@@ -1368,12 +1379,25 @@ body {
   flex: 1;
   min-width: 0;
 }
+.agent-mini-elapsed {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
 .agent-mini-expand {
   font-size: 10px;
   color: var(--text-muted);
   margin-left: auto;
   flex-shrink: 0;
   transition: transform 0.2s;
+}
+.team-inline-members {
+  padding: 4px 0 8px 12px;
+  border-left: 2px solid var(--accent);
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .agent-accordion {
   overflow: hidden;
