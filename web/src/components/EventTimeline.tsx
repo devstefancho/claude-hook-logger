@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useUrlState, useUrlSetState } from "../hooks/useUrlState";
 import type { LogEvent, Summary } from "../types";
 import { EVENT_TYPES } from "../utils/constants";
 import { EventRow } from "./EventRow";
@@ -34,14 +35,12 @@ export function EventTimeline({
   onClearSessionFilter,
   highlightIdx,
 }: EventTimelineProps) {
-  const [activeFilters, setActiveFilters] = useState<Set<string>>(
-    () => new Set(Object.keys(EVENT_TYPES)),
-  );
-  const [searchText, setSearchText] = useState("");
+  const [activeFilters, setActiveFilters] = useUrlSetState("filters", new Set(Object.keys(EVENT_TYPES)));
+  const [searchText, setSearchText] = useUrlState<string>("search", "");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [searchField, setSearchField] = useState<SearchField>("all");
-  const [timeRange, setTimeRange] = useState<TimeRange>("all");
-  const [viewMode, setViewMode] = useState<"list" | "chart">("list");
+  const [searchField, setSearchField] = useUrlState<SearchField>("searchField", "all");
+  const [timeRange, setTimeRange] = useUrlState<TimeRange>("timeRange", "all");
+  const [viewMode, setViewMode] = useUrlState<"list" | "chart">("evView", "list");
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 

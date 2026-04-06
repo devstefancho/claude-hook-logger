@@ -26,6 +26,7 @@ interface DetailPanelProps {
   onOpenTmux: (sid: string) => void;
   onToolClick: (name: string) => void;
   onSkillClick: (name: string) => void;
+  loading: boolean;
   threshold: number;
   onThresholdChange: (value: number) => void;
 }
@@ -45,6 +46,7 @@ export function DetailPanel({
   onToggleSessionFilter,
   onClearSessionFilter,
   highlightIdx,
+  loading,
   onGenerateSummary,
   onOpenTmux,
   onToolClick,
@@ -60,6 +62,7 @@ export function DetailPanel({
           teamGroups={teamGroups}
           ungroupedAgents={ungroupedAgents}
           sessions={sessions}
+          loading={loading}
           selectedSessions={selectedSessions}
           onSelectSession={onSelectSession}
           onToggleSessionFilter={onToggleSessionFilter}

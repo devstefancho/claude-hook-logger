@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useLogData } from "./hooks/useLogData";
 import { useAutoRefresh } from "./hooks/useAutoRefresh";
 import { useAgents } from "./hooks/useAgents";
+import { useUrlState, useUrlSetState } from "./hooks/useUrlState";
 import { TopBar } from "./components/TopBar";
 import { Sidebar } from "./components/Sidebar";
 import { DetailPanel } from "./components/DetailPanel";
@@ -22,7 +23,7 @@ export function App() {
     selectFile,
   } = useLogData();
 
-  const { agents, teamGroups, ungroupedAgents, loadAgents, generateSummary, openInTmux, threshold, setThreshold } = useAgents();
+  const { agents, teamGroups, ungroupedAgents, loading, loadAgents, generateSummary, openInTmux, threshold, setThreshold } = useAgents();
 
   const refreshAll = useCallback(async () => {
     await checkForUpdates();
@@ -32,10 +33,10 @@ export function App() {
   const { enabled: autoRefresh, toggle: toggleAutoRefresh } =
     useAutoRefresh(refreshAll);
 
-  const [activeView, setActiveView] = useState<SidebarView>("agents");
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("full");
+  const [activeView, setActiveView] = useUrlState<SidebarView>("view", "agents");
+  const [layoutMode, setLayoutMode] = useUrlState<LayoutMode>("layout", "full");
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
-  const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
+  const [selectedSessions, setSelectedSessions] = useUrlSetState("sessions", new Set());
   const [highlightIdx, setHighlightIdx] = useState<number | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
 
@@ -152,6 +153,7 @@ export function App() {
           agents={agents}
           teamGroups={teamGroups}
           ungroupedAgents={ungroupedAgents}
+          loading={loading}
           sessions={summary.sessions}
           summary={summary}
           events={events}

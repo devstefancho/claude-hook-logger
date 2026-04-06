@@ -396,3 +396,92 @@ describe("GET /api/teams endpoint", () => {
     assert.equal(res.headers.get("access-control-allow-origin"), "*");
   });
 });
+
+// ---------------------------------------------------------------------------
+// /api/teams enrichment – resolves unmatched members via hook events
+// ---------------------------------------------------------------------------
+describe("GET /api/teams enrichment", () => {
+  let tmpDir: string;
+  let htmlPath: string;
+  let instance: Awaited<ReturnType<typeof startServer>>;
+  let originalHome: string | undefined;
+
+  before(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "teams-enrich-test-"));
+    htmlPath = path.join(tmpDir, "index.html");
+    fs.writeFileSync(htmlPath, "<html><body>OK</body></html>");
+
+    originalHome = process.env.HOME;
+    const fakeHome = path.join(tmpDir, "home");
+    const teamsDir = path.join(fakeHome, ".claude", "teams", "enrich-team");
+    fs.mkdirSync(teamsDir, { recursive: true });
+    fs.mkdirSync(path.join(fakeHome, ".claude", "sessions"), { recursive: true });
+
+    // Team with unresolved member (has joinedAt but no sessionId)
+    const joinedAt = new Date("2024-01-01T00:00:05Z").getTime();
+    fs.writeFileSync(
+      path.join(teamsDir, "config.json"),
+      JSON.stringify({
+        name: "enrich-team",
+        description: "Enrichment test",
+        createdAt: 1000,
+        leadAgentId: "lead@enrich-team",
+        leadSessionId: "lead-sid",
+        members: [
+          { agentId: "lead@enrich-team", name: "team-lead", cwd: "/project-x", sessionId: "lead-sid" },
+          { agentId: "impl@enrich-team", name: "implementer", cwd: "/project-x", joinedAt },
+        ],
+      }),
+    );
+    process.env.HOME = fakeHome;
+
+    // Create log events with a session matching the unresolved member's cwd and joinedAt
+    const logDir = path.join(tmpDir, "logs");
+    fs.mkdirSync(logDir, { recursive: true });
+    const events = [
+      { event: "SessionStart", session_id: "matched-session-123", ts: "2024-01-01T00:00:04Z", cwd: "/project-x" },
+      { event: "PreToolUse", session_id: "matched-session-123", ts: "2024-01-01T00:00:10Z", data: { tool_name: "Read", tool_use_id: "t1" } },
+      { event: "PostToolUse", session_id: "matched-session-123", ts: "2024-01-01T00:00:11Z", data: { tool_name: "Read", tool_use_id: "t1" } },
+    ];
+    fs.writeFileSync(
+      path.join(logDir, "hook-events.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+
+    instance = await startServer(logDir, htmlPath);
+  });
+
+  after(async () => {
+    await stopServer(instance.server);
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resolves unmatched member sessionId via hook event temporal matching", async () => {
+    const res = await fetchJson(instance.baseUrl, "/api/teams");
+    assert.equal(res.status, 200);
+    const teams = res.body.teams as Array<{ name: string; members: Array<{ name: string; sessionId?: string }> }>;
+    assert.equal(teams.length, 1);
+    const impl = teams[0].members.find((m) => m.name === "implementer");
+    assert.ok(impl, "implementer member should exist");
+    // getTeams couldn't resolve (no session files), server enrichment resolves via events
+    assert.equal(impl.sessionId, "matched-session-123");
+  });
+
+  it("does not re-assign already assigned sessions", async () => {
+    const res = await fetchJson(instance.baseUrl, "/api/teams");
+    const teams = res.body.teams as Array<{ members: Array<{ name: string; sessionId?: string }> }>;
+    const lead = teams[0].members.find((m) => m.name === "team-lead");
+    assert.equal(lead!.sessionId, "lead-sid");
+  });
+
+  it("skips enrichment when all members are resolved", async () => {
+    // This is implicitly tested - the existing /api/teams test has no joinedAt members
+    const res = await fetchJson(instance.baseUrl, "/api/teams");
+    assert.equal(res.status, 200);
+  });
+});

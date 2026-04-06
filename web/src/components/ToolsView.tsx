@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
+import { useUrlState } from "../hooks/useUrlState";
 import type { ToolUsageEntry } from "../types";
 
 type SortBy = "count" | "az" | "za";
@@ -9,9 +10,9 @@ interface ToolsViewProps {
 }
 
 export function ToolsView({ tools, onToolClick }: ToolsViewProps) {
-  const [sortBy, setSortBy] = useState<SortBy>("count");
-  const [search, setSearch] = useState("");
-  const [minCount, setMinCount] = useState(1);
+  const [sortBy, setSortBy] = useUrlState<SortBy>("toolSort", "count");
+  const [search, setSearch] = useUrlState<string>("toolSearch", "");
+  const [minCount, setMinCount] = useUrlState<number>("toolMin", 1);
 
   const processed = useMemo(() => {
     let list = tools;

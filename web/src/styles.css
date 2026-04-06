@@ -1551,3 +1551,23 @@ body {
   overflow: hidden;
   min-height: 0;
 }
+
+/* Skeleton loading */
+.skeleton-card {
+  background: var(--card-bg, #161b22);
+  border: 1px solid var(--border, #30363d);
+  border-radius: 8px;
+  padding: 16px;
+  min-height: 120px;
+}
+.skeleton-line {
+  border-radius: 4px;
+  background: var(--border, #30363d);
+}
+.skeleton-pulse {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}

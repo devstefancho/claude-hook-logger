@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useUrlState } from "../hooks/useUrlState";
 import type { AgentInfo, SessionInfo, TeamInfo } from "../types";
 import type { TeamGroup } from "../hooks/useAgents";
 import { formatRelativeTime, truncate } from "../utils/format";
@@ -207,6 +208,7 @@ interface AgentsViewProps {
   teamGroups: TeamGroup[];
   ungroupedAgents: AgentInfo[];
   sessions: SessionInfo[];
+  loading: boolean;
   selectedSessions: Set<string>;
   onSelectSession: (sid: string) => void;
   onToggleSessionFilter: (sid: string) => void;
@@ -303,11 +305,33 @@ function TeamOverviewCard({
   );
 }
 
+function SkeletonCard() {
+  return (
+    <div className="skeleton-card">
+      <div className="skeleton-pulse skeleton-line" style={{ width: "60%", height: 14 }} />
+      <div className="skeleton-pulse skeleton-line" style={{ width: "80%", height: 10, marginTop: 8 }} />
+      <div className="skeleton-pulse skeleton-line" style={{ width: "40%", height: 10, marginTop: 8 }} />
+      <div className="skeleton-pulse skeleton-line" style={{ width: "70%", height: 10, marginTop: 8 }} />
+    </div>
+  );
+}
+
+function SkeletonView() {
+  return (
+    <div className="agents-grid">
+      {Array.from({ length: 4 }, (_, i) => (
+        <SkeletonCard key={i} />
+      ))}
+    </div>
+  );
+}
+
 export function AgentsView({
   agents,
   teamGroups,
   ungroupedAgents,
   sessions,
+  loading,
   selectedSessions,
   onSelectSession,
   onToggleSessionFilter,
@@ -318,13 +342,16 @@ export function AgentsView({
   threshold,
   onThresholdChange,
 }: AgentsViewProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sortBy, setSortBy] = useState<SortBy>("status");
+  const [searchQuery, setSearchQuery] = useUrlState<string>("agentSearch", "");
+  const [statusFilter, setStatusFilter] = useUrlState<StatusFilter>("status", "all");
+  const [sortBy, setSortBy] = useUrlState<SortBy>("agentSort", "status");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("teams");
+  const [selectedTeam, setSelectedTeam] = useUrlState<string | null>("team", null, {
+    serialize: (v) => v ?? "",
+    deserialize: (v) => v || null,
+  });
+  const [viewMode, setViewMode] = useUrlState<ViewMode>("agentView", "teams");
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [splitSelectedItem, setSplitSelectedItem] = useState<{ type: "team" | "agent"; id: string } | null>(null);
   const [, setTick] = useState(0);
@@ -422,8 +449,11 @@ export function AgentsView({
     onOpenTmux,
   };
 
-  // Reset selectedTeam when switching case modes
+  // Reset selectedTeam when switching view modes (skip initial mount)
+  const prevViewMode = useRef(viewMode);
   useEffect(() => {
+    if (prevViewMode.current === viewMode) return;
+    prevViewMode.current = viewMode;
     setSelectedTeam(null);
     setSplitSelectedItem(null);
     setExpandedCards(new Set());
@@ -462,7 +492,7 @@ export function AgentsView({
 
   // === Original: team-group collapsible + agents-grid ===
   const renderOriginal = () => {
-    if (!agents.length) return <div className="empty-state">No agents found</div>;
+    if (!agents.length) return loading ? <SkeletonView /> : <div className="empty-state">No agents found</div>;
     return (
       <>
         {renderFilterActions()}
@@ -524,7 +554,7 @@ export function AgentsView({
 
   // === Compact: Accordion ===
   const renderAccordion = () => {
-    if (!agents.length) return <div className="empty-state">No agents found</div>;
+    if (!agents.length) return loading ? <SkeletonView /> : <div className="empty-state">No agents found</div>;
 
     const renderAccordionItems = (list: AgentInfo[], team?: TeamInfo) =>
       list.map((agent) => {
@@ -596,7 +626,7 @@ export function AgentsView({
 
   // === Case 4: Dashboard Overview ===
   const renderDashboardOverview = () => {
-    if (!agents.length) return <div className="empty-state">No agents found</div>;
+    if (!agents.length) return loading ? <SkeletonView /> : <div className="empty-state">No agents found</div>;
     return (
       <>
         {renderFilterActions()}
@@ -669,7 +699,7 @@ export function AgentsView({
 
   // === Case 5: Split Panel ===
   const renderSplitPanel = () => {
-    if (!agents.length) return <div className="empty-state">No agents found</div>;
+    if (!agents.length) return loading ? <SkeletonView /> : <div className="empty-state">No agents found</div>;
 
     const renderLeftPanel = () => (
       <div className="agents-list-panel">

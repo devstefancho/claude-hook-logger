@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useUrlState } from "./useUrlState";
 import type { AgentInfo, TeamInfo } from "../types";
 
 export interface TeamGroup {
@@ -8,11 +9,33 @@ export interface TeamGroup {
   idleCount: number;
 }
 
+function getCacheKey(threshold: number) {
+  return `agents-cache-${threshold}`;
+}
+
+function readCache(threshold: number): { agents: AgentInfo[]; teams: TeamInfo[] } | null {
+  try {
+    const raw = sessionStorage.getItem(getCacheKey(threshold));
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(threshold: number, agents: AgentInfo[], teams: TeamInfo[]) {
+  try {
+    sessionStorage.setItem(getCacheKey(threshold), JSON.stringify({ agents, teams }));
+  } catch {
+    // ignore quota errors
+  }
+}
+
 export function useAgents() {
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [teams, setTeams] = useState<TeamInfo[]>([]);
+  const [threshold, setThreshold] = useUrlState<number>("threshold", 5);
+  const [agents, setAgents] = useState<AgentInfo[]>(() => readCache(threshold)?.agents ?? []);
+  const [teams, setTeams] = useState<TeamInfo[]>(() => readCache(threshold)?.teams ?? []);
   const [loading, setLoading] = useState(false);
-  const [threshold, setThreshold] = useState(5); // minutes
   const [actionStatus, setActionStatus] = useState<{ id: string; type: string; ok: boolean } | null>(null);
   const initialLoad = useRef(false);
 
@@ -25,8 +48,11 @@ export function useAgents() {
       ]);
       const agentsData = await agentsRes.json();
       const teamsData = await teamsRes.json();
-      setAgents(agentsData.agents || []);
-      setTeams(teamsData.teams || []);
+      const newAgents = agentsData.agents || [];
+      const newTeams = teamsData.teams || [];
+      setAgents(newAgents);
+      setTeams(newTeams);
+      writeCache(threshold, newAgents, newTeams);
     } catch {
       // ignore fetch errors
     } finally {
