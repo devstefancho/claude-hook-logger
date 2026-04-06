@@ -17,3 +17,9 @@ ToolsView와 SkillsView에 각각 sortBy, searchQuery, minCount 상태를 추가
 - 검색 입력 시 도구/스킬 목록이 실시간 필터링됨
 - 사용 횟수 조건 필터가 정렬/검색과 동시에 동작함
 - 도구 항목 클릭 시 Events 뷰로 전환되고 해당 도구 이벤트만 필터링됨
+
+## Implementation Status
+- [x] 정렬 옵션 (Count / A-Z / Z-A)
+- [x] 텍스트 검색 실시간 필터링
+- [x] Min count 필터 (1/3/5/10 드롭다운)
+- [x] 도구/스킬 클릭 → Events 뷰 전환 + 필터링

@@ -19,3 +19,10 @@
 - AgentsView에서 상태 필터, 검색, threshold 설정, tmux/summary/filter 액션이 모두 동작함
 - EventTimeline의 이벤트 타입 필터, 텍스트 검색, 세션 필터링, 가상화 스크롤이 유지됨
 - ChatPanel이 TopBar 토글로 열리고 리사이즈/SSE 스트리밍이 정상 동작함
+
+## Implementation Status
+- [x] TopBar — 레이아웃 토글(full/compact/focus), 파일 선택, refresh, auto-refresh, chat 토글
+- [x] Sidebar — 4개 탭 네비게이션 + 카운트 뱃지 + 아이콘 모드 + 하단 통계
+- [x] DetailPanel — activeView별 뷰 전환 (AgentsView, ToolsView, SkillsView, EventTimeline)
+- [x] AgentsView — 에이전트 카드/필터/검색/threshold/tmux/summary/filter 이관 완료
+- [x] 6개 구 컴포넌트 삭제, 5개 신규 컴포넌트 도입

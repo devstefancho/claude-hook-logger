@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // CLI entry point for the Hook Events Log Viewer server
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,11 +17,37 @@ const srcWebDir = path.join(__dirname, "..", "web");
 const webDir = fs.existsSync(path.join(distWebDir, "index.html")) ? distWebDir : srcWebDir;
 const server = createServer(DEFAULT_LOG_DIR, path.join(__dirname, "index.html"), webDir);
 
-server.listen(PORT, () => {
-  console.log(`Hook Events Log Viewer running at http://localhost:${PORT}`);
-  console.log(`Log directory: ${DEFAULT_LOG_DIR}`);
-  console.log("Press Ctrl+C to stop");
+function startServer() {
+  server.listen(PORT, () => {
+    console.log(`Hook Events Log Viewer running at http://localhost:${PORT}`);
+    console.log(`Log directory: ${DEFAULT_LOG_DIR}`);
+    console.log("Press Ctrl+C to stop");
+  });
+}
+
+let retried = false;
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE" && !retried) {
+    retried = true;
+    console.log(`Port ${PORT} is in use. Attempting to kill existing process...`);
+    try {
+      const pid = execSync(`lsof -ti :${PORT}`, { encoding: "utf-8" }).trim();
+      if (pid) {
+        execSync(`kill -9 ${pid}`);
+        console.log(`Killed process ${pid}`);
+        setTimeout(startServer, 1000);
+        return;
+      }
+    } catch {
+      // lsof or kill failed
+    }
+    console.error(`Port ${PORT} is still in use. Try: sudo kill -9 $(lsof -ti :${PORT})`);
+    process.exit(1);
+  }
+  throw err;
 });
+
+startServer();
 
 function shutdown(): void {
   console.log("\nShutting down...");

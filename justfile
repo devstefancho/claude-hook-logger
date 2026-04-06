@@ -56,8 +56,12 @@ analyze *args:
 
 # --- Dev ---
 
-# 빌드 후 서버 시작 (Playwright 테스트용)
-dev: build
+# 포트 7777 점유 프로세스 종료
+kill:
+    -lsof -ti :7777 | xargs kill -9 2>/dev/null; echo "Port 7777 freed"
+
+# 빌드 후 서버 시작 (기존 포트 점유 프로세스 자동 정리)
+dev: kill build
     pnpm run dev:server
 
 # --- Electron ---

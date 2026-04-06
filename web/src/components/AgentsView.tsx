@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import type { AgentInfo, SessionInfo, TeamInfo } from "../types";
 import type { TeamGroup } from "../hooks/useAgents";
 import { formatRelativeTime, truncate } from "../utils/format";
@@ -35,6 +35,15 @@ const THRESHOLD_OPTIONS = [
 
 type StatusFilter = "all" | AgentInfo["status"];
 type SortBy = "status" | "activity" | "name";
+type ViewMode = "cards" | "compact" | "teams" | "split";
+
+const VIEW_OPTIONS: { value: ViewMode; label: string; icon: string }[] = [
+  { value: "cards", label: "Grid", icon: "▦" },
+  { value: "compact", label: "List", icon: "≡" },
+  { value: "teams", label: "Team", icon: "⊞" },
+  { value: "split", label: "Split", icon: "◫" },
+];
+
 
 function formatDuration(ms: number): string {
   if (ms < 60000) return "<1m";
@@ -209,6 +218,91 @@ interface AgentsViewProps {
   onThresholdChange: (value: number) => void;
 }
 
+// === Compact: Mini Card (Accordion collapsed state) ===
+function AgentMiniCard({
+  agent,
+  isExpanded,
+  onClick,
+}: {
+  agent: AgentInfo;
+  isExpanded: boolean;
+  onClick: () => void;
+}) {
+  const color = STATUS_COLORS[agent.status];
+
+  return (
+    <div
+      className="agent-mini-card"
+      style={{ "--status-color": color } as React.CSSProperties}
+      onClick={onClick}
+    >
+      <span className="agent-dot-v2" style={{ backgroundColor: color, width: 8, height: 8, flexShrink: 0 }} />
+      <span className="agent-name-v2" style={{ fontSize: 11, flexShrink: 0 }}>
+        {agent.name ? `"${agent.name}"` : agent.sessionId.slice(0, 8)}
+      </span>
+      <span className="agent-mini-project">{agent.projectName}</span>
+      <span className="agent-badge-v2" style={{ backgroundColor: color, fontSize: 9, padding: "1px 6px" }}>
+        {STATUS_LABELS[agent.status]}
+      </span>
+      <span className="agent-mini-expand">{isExpanded ? "▾" : "▸"}</span>
+    </div>
+  );
+}
+
+// === Case 4: Team Overview Card (richer than Case 2) ===
+function TeamOverviewCard({
+  group,
+  filteredCount,
+  onClick,
+}: {
+  group: TeamGroup;
+  filteredCount: number;
+  onClick: () => void;
+}) {
+  const activeCount = group.agents.filter((a) => a.status === "active").length;
+  const idleCount = group.agents.filter((a) => a.status === "idle").length;
+  const totalEvents = group.agents.reduce((sum, a) => sum + a.eventCount, 0);
+  const latestActivity = group.agents.reduce((latest, a) => {
+    const t = new Date(a.lastActivity).getTime();
+    return t > latest ? t : latest;
+  }, 0);
+
+  return (
+    <div className="team-dashboard-card" onClick={onClick}>
+      <div className="team-dashboard-card-header">
+        <span className="team-dashboard-card-name">{group.team.name}</span>
+        <span className="team-dashboard-card-count">
+          {filteredCount}/{group.agents.length} members
+        </span>
+      </div>
+      <div className="team-dashboard-card-dots">
+        {group.agents.map((a) => (
+          <span
+            key={a.sessionId}
+            className="team-dashboard-dot"
+            style={{ backgroundColor: STATUS_COLORS[a.status] }}
+            title={`${a.name || a.sessionId.slice(0, 8)} — ${STATUS_LABELS[a.status]}`}
+          />
+        ))}
+      </div>
+      <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>
+        {group.agents.map((a) => a.name || a.sessionId.slice(0, 6)).join(", ")}
+      </div>
+      <div className="team-dashboard-card-meta">
+        <span style={{ color: "#3fb950" }}>{activeCount} active</span>
+        {" / "}
+        <span style={{ color: "#d29922" }}>{idleCount} idle</span>
+        <span> · {totalEvents} events</span>
+        {latestActivity > 0 && (
+          <span className="team-dashboard-card-time">
+            {" · "}last {formatRelativeTime(new Date(latestActivity).toISOString())} ago
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function AgentsView({
   agents,
   teamGroups,
@@ -229,7 +323,24 @@ export function AgentsView({
   const [sortBy, setSortBy] = useState<SortBy>("status");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("teams");
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [splitSelectedItem, setSplitSelectedItem] = useState<{ type: "team" | "agent"; id: string } | null>(null);
   const [, setTick] = useState(0);
+
+  // Escape key to go back to overview
+  useEffect(() => {
+    if (selectedTeam === null && splitSelectedItem === null) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedTeam(null);
+        setSplitSelectedItem(null);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedTeam, splitSelectedItem]);
 
   // Live elapsed time update for active agents
   useEffect(() => {
@@ -250,6 +361,15 @@ export function AgentsView({
       const next = new Set(prev);
       if (next.has(teamName)) next.delete(teamName);
       else next.add(teamName);
+      return next;
+    });
+  }, []);
+
+  const toggleExpandCard = useCallback((sessionId: string) => {
+    setExpandedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
       return next;
     });
   }, []);
@@ -302,175 +422,489 @@ export function AgentsView({
     onOpenTmux,
   };
 
-  return (
-    <div className="view-container">
-      <div className="view-header">
-        <div className="view-title-row">
-          <h2 className="view-title">AGENTS</h2>
-          <span className="view-subtitle">
-            <span style={{ color: "#3fb950" }}>{activeCount} active</span>
-            {" / "}
-            <span style={{ color: "#d29922" }}>{idleCount} idle</span>
-            {" / "}
-            <span>{agents.length} total</span>
-          </span>
-        </div>
-        <div className="view-controls">
-          <div className="status-filters">
-            {(["all", "active", "idle", "waiting", "ended"] as StatusFilter[]).map((s) => (
-              <button
-                key={s}
-                className={`filter-pill${statusFilter === s ? " active" : ""}`}
-                onClick={() => setStatusFilter(s)}
-              >
-                {s === "all" ? "All" : STATUS_LABELS[s]}
-              </button>
-            ))}
-          </div>
-          <span className="threshold-control">
-            active &lt;
-            <select
-              value={threshold}
-              onChange={(e) => onThresholdChange(Number(e.target.value))}
-              className="threshold-select"
-            >
-              {THRESHOLD_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </span>
-          <select
-            className="sort-select"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-          >
-            <option value="status">Sort: Status</option>
-            <option value="activity">Sort: Activity</option>
-            <option value="name">Sort: Name</option>
-          </select>
-          <input
-            className="view-search"
-            type="text"
-            placeholder="Search agents..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+  // Reset selectedTeam when switching case modes
+  useEffect(() => {
+    setSelectedTeam(null);
+    setSplitSelectedItem(null);
+    setExpandedCards(new Set());
+  }, [viewMode]);
+
+  // === Render helpers for each case ===
+
+  const renderFilterActions = () => {
+    if (selectedSessions.size === 0) return null;
+    return (
+      <div className="agents-filter-actions">
+        <span className="filter-count">{selectedSessions.size} selected</span>
+        <button
+          className="action-btn active"
+          onClick={() => onFilterBySession(Array.from(selectedSessions)[0])}
+        >
+          View Events
+        </button>
+        <button className="action-btn" onClick={onClearSessionFilter}>
+          Clear
+        </button>
       </div>
-      <div className="view-body">
-        {!agents.length ? (
-          <div className="empty-state">No agents found</div>
-        ) : (
+    );
+  };
+
+  const renderAgentCard = (agent: AgentInfo, team?: TeamInfo) => (
+    <AgentCard
+      key={agent.sessionId}
+      agent={agent}
+      session={sessionMap.get(agent.sessionId)}
+      role={team ? getMemberRole(agent, team) : null}
+      isSelected={selectedSessions.has(agent.sessionId)}
+      {...cardProps}
+    />
+  );
+
+  // === Original: team-group collapsible + agents-grid ===
+  const renderOriginal = () => {
+    if (!agents.length) return <div className="empty-state">No agents found</div>;
+    return (
+      <>
+        {renderFilterActions()}
+        {hasTeams ? (
           <>
-            {selectedSessions.size > 0 && (
-              <div className="agents-filter-actions">
-                <span className="filter-count">{selectedSessions.size} selected</span>
-                <button
-                  className="action-btn active"
-                  onClick={() => {
-                    onFilterBySession(Array.from(selectedSessions)[0]);
-                  }}
-                >
-                  View Events
-                </button>
-                <button className="action-btn" onClick={onClearSessionFilter}>
-                  Clear
-                </button>
-              </div>
-            )}
-
-            {hasTeams ? (
-              <>
-                {teamGroups.map((group) => {
-                  const filteredAgents = filterAndSort(group.agents);
-                  if (filteredAgents.length === 0) return null;
-                  const isCollapsed = collapsedTeams.has(group.team.name);
-
-                  return (
-                    <div key={group.team.name} className="team-group">
-                      <div
-                        className="team-group-header"
-                        onClick={() => toggleTeamCollapse(group.team.name)}
-                      >
-                        <span className="team-collapse-icon">
-                          {isCollapsed ? "▸" : "▾"}
-                        </span>
-                        <span className="team-group-name">{group.team.name}</span>
-                        <span className="team-group-count">{group.agents.length} members</span>
-                        <span className="team-group-status">
-                          <span style={{ color: "#3fb950" }}>{group.activeCount} active</span>
-                          {" / "}
-                          <span style={{ color: "#d29922" }}>{group.idleCount} idle</span>
-                        </span>
-                      </div>
-                      {!isCollapsed && (
-                        <div className="agents-grid">
-                          {filteredAgents.map((agent) => (
-                            <AgentCard
-                              key={agent.sessionId}
-                              agent={agent}
-                              session={sessionMap.get(agent.sessionId)}
-                              role={getMemberRole(agent, group.team)}
-                              isSelected={selectedSessions.has(agent.sessionId)}
-                              {...cardProps}
-                            />
-                          ))}
-                        </div>
-                      )}
+            {teamGroups.map((group) => {
+              const filteredAgents = filterAndSort(group.agents);
+              if (filteredAgents.length === 0) return null;
+              const isCollapsed = collapsedTeams.has(group.team.name);
+              return (
+                <div className="team-group" key={group.team.name}>
+                  <div
+                    className="team-group-header"
+                    onClick={() => toggleTeamCollapse(group.team.name)}
+                  >
+                    <span className="team-collapse-icon">{isCollapsed ? "▸" : "▾"}</span>
+                    <span className="team-group-name">{group.team.name}</span>
+                    <span className="team-group-count">{filteredAgents.length} sessions</span>
+                  </div>
+                  {!isCollapsed && (
+                    <div className="agents-grid">
+                      {filteredAgents.map((agent) => renderAgentCard(agent, group.team))}
                     </div>
-                  );
-                })}
-
-                {(() => {
-                  const filteredUngrouped = filterAndSort(ungroupedAgents);
-                  if (filteredUngrouped.length === 0) return null;
-                  const isCollapsed = collapsedTeams.has("__ungrouped__");
-                  return (
-                    <div className="team-group">
-                      <div
-                        className="team-group-header"
-                        onClick={() => toggleTeamCollapse("__ungrouped__")}
-                      >
-                        <span className="team-collapse-icon">
-                          {isCollapsed ? "▸" : "▾"}
-                        </span>
-                        <span className="team-group-name">Ungrouped</span>
-                        <span className="team-group-count">{filteredUngrouped.length} sessions</span>
-                      </div>
-                      {!isCollapsed && (
-                        <div className="agents-grid">
-                          {filteredUngrouped.map((agent) => (
-                            <AgentCard
-                              key={agent.sessionId}
-                              agent={agent}
-                              session={sessionMap.get(agent.sessionId)}
-                              role={null}
-                              isSelected={selectedSessions.has(agent.sessionId)}
-                              {...cardProps}
-                            />
-                          ))}
-                        </div>
-                      )}
+                  )}
+                </div>
+              );
+            })}
+            {(() => {
+              const filteredUngrouped = filterAndSort(ungroupedAgents);
+              if (filteredUngrouped.length === 0) return null;
+              const isCollapsed = collapsedTeams.has("__ungrouped__");
+              return (
+                <div className="team-group">
+                  <div
+                    className="team-group-header"
+                    onClick={() => toggleTeamCollapse("__ungrouped__")}
+                  >
+                    <span className="team-collapse-icon">{isCollapsed ? "▸" : "▾"}</span>
+                    <span className="team-group-name">Ungrouped</span>
+                    <span className="team-group-count">{filteredUngrouped.length} sessions</span>
+                  </div>
+                  {!isCollapsed && (
+                    <div className="agents-grid">
+                      {filteredUngrouped.map((agent) => renderAgentCard(agent))}
                     </div>
-                  );
-                })()}
-              </>
-            ) : (
-              <div className="agents-grid">
-                {filterAndSort(agents).map((agent) => (
-                  <AgentCard
-                    key={agent.sessionId}
-                    agent={agent}
-                    session={sessionMap.get(agent.sessionId)}
-                    role={null}
-                    isSelected={selectedSessions.has(agent.sessionId)}
-                    {...cardProps}
-                  />
-                ))}
-              </div>
-            )}
+                  )}
+                </div>
+              );
+            })()}
           </>
+        ) : (
+          <div className="agents-grid">
+            {filterAndSort(agents).map((agent) => renderAgentCard(agent))}
+          </div>
         )}
+      </>
+    );
+  };
+
+  // === Compact: Accordion ===
+  const renderAccordion = () => {
+    if (!agents.length) return <div className="empty-state">No agents found</div>;
+
+    const renderAccordionItems = (list: AgentInfo[], team?: TeamInfo) =>
+      list.map((agent) => {
+        const isExpanded = expandedCards.has(agent.sessionId);
+        return (
+          <div key={agent.sessionId} className={`agent-accordion${isExpanded ? " expanded" : ""}`}>
+            <AgentMiniCard
+              agent={agent}
+              isExpanded={isExpanded}
+              onClick={() => toggleExpandCard(agent.sessionId)}
+            />
+            {isExpanded && (
+              <div onClick={() => toggleExpandCard(agent.sessionId)}>
+                {renderAgentCard(agent, team)}
+              </div>
+            )}
+          </div>
+        );
+      });
+
+    return (
+      <>
+        {renderFilterActions()}
+        {hasTeams ? (
+          <>
+            {teamGroups.map((group) => {
+              const filteredAgents = filterAndSort(group.agents);
+              if (filteredAgents.length === 0) return null;
+              const isCollapsed = collapsedTeams.has(group.team.name);
+              return (
+                <div className="team-group" key={group.team.name}>
+                  <div
+                    className="team-group-header"
+                    onClick={() => toggleTeamCollapse(group.team.name)}
+                  >
+                    <span className="team-collapse-icon">{isCollapsed ? "▸" : "▾"}</span>
+                    <span className="team-group-name">{group.team.name}</span>
+                    <span className="team-group-count">{filteredAgents.length} sessions</span>
+                  </div>
+                  {!isCollapsed && renderAccordionItems(filteredAgents, group.team)}
+                </div>
+              );
+            })}
+            {(() => {
+              const filteredUngrouped = filterAndSort(ungroupedAgents);
+              if (filteredUngrouped.length === 0) return null;
+              const isCollapsed = collapsedTeams.has("__ungrouped__");
+              return (
+                <div className="team-group">
+                  <div
+                    className="team-group-header"
+                    onClick={() => toggleTeamCollapse("__ungrouped__")}
+                  >
+                    <span className="team-collapse-icon">{isCollapsed ? "▸" : "▾"}</span>
+                    <span className="team-group-name">Ungrouped</span>
+                    <span className="team-group-count">{filteredUngrouped.length} sessions</span>
+                  </div>
+                  {!isCollapsed && renderAccordionItems(filteredUngrouped)}
+                </div>
+              );
+            })()}
+          </>
+        ) : (
+          renderAccordionItems(filterAndSort(agents))
+        )}
+      </>
+    );
+  };
+
+  // === Case 4: Dashboard Overview ===
+  const renderDashboardOverview = () => {
+    if (!agents.length) return <div className="empty-state">No agents found</div>;
+    return (
+      <>
+        {renderFilterActions()}
+        {hasTeams && selectedTeam !== null ? (
+          (() => {
+            const group = teamGroups.find((g) => g.team.name === selectedTeam);
+            if (!group) return null;
+            const filteredAgents = filterAndSort(group.agents);
+            return (
+              <div className="team-detail-view">
+                <div className="team-detail-header">
+                  <button
+                    className="team-detail-back"
+                    onClick={() => setSelectedTeam(null)}
+                  >
+                    ← Back
+                  </button>
+                  <span className="team-detail-name">{group.team.name}</span>
+                  <span className="team-detail-count">{filteredAgents.length} members</span>
+                </div>
+                <div className="agents-grid">
+                  {filteredAgents.map((agent) => renderAgentCard(agent, group.team))}
+                </div>
+              </div>
+            );
+          })()
+        ) : hasTeams ? (
+          <>
+            <div className="team-dashboard-grid">
+              {teamGroups.map((group) => {
+                const filteredAgents = filterAndSort(group.agents);
+                if (filteredAgents.length === 0) return null;
+                return (
+                  <TeamOverviewCard
+                    key={group.team.name}
+                    group={group}
+                    filteredCount={filteredAgents.length}
+                    onClick={() => setSelectedTeam(group.team.name)}
+                  />
+                );
+              })}
+            </div>
+            {(() => {
+              const filteredUngrouped = filterAndSort(ungroupedAgents);
+              if (filteredUngrouped.length === 0) return null;
+              return (
+                <div className="team-group">
+                  <div className="team-group-header" onClick={() => toggleTeamCollapse("__ungrouped__")}>
+                    <span className="team-collapse-icon">{collapsedTeams.has("__ungrouped__") ? "▸" : "▾"}</span>
+                    <span className="team-group-name">Ungrouped</span>
+                    <span className="team-group-count">{filteredUngrouped.length} sessions</span>
+                  </div>
+                  {!collapsedTeams.has("__ungrouped__") && (
+                    <div className="agents-grid">
+                      {filteredUngrouped.map((agent) => renderAgentCard(agent))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </>
+        ) : (
+          <div className="agents-grid">
+            {filterAndSort(agents).map((agent) => renderAgentCard(agent))}
+          </div>
+        )}
+      </>
+    );
+  };
+
+  // === Case 5: Split Panel ===
+  const renderSplitPanel = () => {
+    if (!agents.length) return <div className="empty-state">No agents found</div>;
+
+    const renderLeftPanel = () => (
+      <div className="agents-list-panel">
+        {hasTeams && teamGroups.map((group) => {
+          const filteredAgents = filterAndSort(group.agents);
+          if (filteredAgents.length === 0) return null;
+          const isCollapsed = collapsedTeams.has(group.team.name);
+          const isTeamSelected = splitSelectedItem?.type === "team" && splitSelectedItem.id === group.team.name;
+          return (
+            <div className="agents-list-tree" key={group.team.name}>
+              <div
+                className={`agents-list-team${isTeamSelected ? " active" : ""}`}
+                onClick={() => {
+                  setSplitSelectedItem({ type: "team", id: group.team.name });
+                  toggleTeamCollapse(group.team.name);
+                }}
+              >
+                <span>{isCollapsed ? "▸" : "▾"}</span>
+                <span className="agents-list-team-name">{group.team.name}</span>
+                <span className="agents-list-team-count">{filteredAgents.length}</span>
+              </div>
+              {!isCollapsed && filteredAgents.map((agent) => {
+                const isAgentSelected = splitSelectedItem?.type === "agent" && splitSelectedItem.id === agent.sessionId;
+                return (
+                  <div
+                    key={agent.sessionId}
+                    className={`agents-list-member${isAgentSelected ? " active" : ""}`}
+                    onClick={() => setSplitSelectedItem({ type: "agent", id: agent.sessionId })}
+                  >
+                    <span className="agent-dot-v2" style={{ backgroundColor: STATUS_COLORS[agent.status], width: 6, height: 6 }} />
+                    <span className="agents-list-member-name">
+                      {agent.name || agent.sessionId.slice(0, 8)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+        {(() => {
+          const filteredUngrouped = filterAndSort(ungroupedAgents);
+          if (filteredUngrouped.length === 0 && !hasTeams) {
+            // No teams at all — show flat list
+            return filterAndSort(agents).map((agent) => {
+              const isAgentSelected = splitSelectedItem?.type === "agent" && splitSelectedItem.id === agent.sessionId;
+              return (
+                <div
+                  key={agent.sessionId}
+                  className={`agents-list-member${isAgentSelected ? " active" : ""}`}
+                  style={{ paddingLeft: 12 }}
+                  onClick={() => setSplitSelectedItem({ type: "agent", id: agent.sessionId })}
+                >
+                  <span className="agent-dot-v2" style={{ backgroundColor: STATUS_COLORS[agent.status], width: 6, height: 6 }} />
+                  <span className="agents-list-member-name">
+                    {agent.name || agent.sessionId.slice(0, 8)}
+                  </span>
+                </div>
+              );
+            });
+          }
+          if (filteredUngrouped.length === 0) return null;
+          const isCollapsed = collapsedTeams.has("__ungrouped__");
+          return (
+            <div className="agents-list-tree">
+              <div
+                className="agents-list-team"
+                onClick={() => toggleTeamCollapse("__ungrouped__")}
+              >
+                <span>{isCollapsed ? "▸" : "▾"}</span>
+                <span className="agents-list-team-name">Ungrouped</span>
+                <span className="agents-list-team-count">{filteredUngrouped.length}</span>
+              </div>
+              {!isCollapsed && filteredUngrouped.map((agent) => {
+                const isAgentSelected = splitSelectedItem?.type === "agent" && splitSelectedItem.id === agent.sessionId;
+                return (
+                  <div
+                    key={agent.sessionId}
+                    className={`agents-list-member${isAgentSelected ? " active" : ""}`}
+                    onClick={() => setSplitSelectedItem({ type: "agent", id: agent.sessionId })}
+                  >
+                    <span className="agent-dot-v2" style={{ backgroundColor: STATUS_COLORS[agent.status], width: 6, height: 6 }} />
+                    <span className="agents-list-member-name">
+                      {agent.name || agent.sessionId.slice(0, 8)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </div>
+    );
+
+    const renderRightPanel = () => {
+      if (!splitSelectedItem) {
+        return (
+          <div className="agents-detail-panel">
+            <div className="agents-detail-placeholder">Select a team or agent</div>
+          </div>
+        );
+      }
+      if (splitSelectedItem.type === "team") {
+        const group = teamGroups.find((g) => g.team.name === splitSelectedItem.id);
+        if (!group) return <div className="agents-detail-panel"><div className="agents-detail-placeholder">Team not found</div></div>;
+        const filteredAgents = filterAndSort(group.agents);
+        return (
+          <div className="agents-detail-panel">
+            <div className="agents-detail-team-summary">
+              <div className="agents-detail-team-name">{group.team.name}</div>
+              <div className="agents-detail-team-desc">{group.team.description}</div>
+              <div className="agents-detail-team-stats">
+                <span style={{ color: "#3fb950" }}>{group.activeCount} active</span>
+                {" / "}
+                <span style={{ color: "#d29922" }}>{group.idleCount} idle</span>
+                {" / "}
+                <span>{group.agents.length} total</span>
+              </div>
+            </div>
+            <div className="agents-grid">
+              {filteredAgents.map((agent) => renderAgentCard(agent, group.team))}
+            </div>
+          </div>
+        );
+      }
+      // Agent selected
+      const agent = agents.find((a) => a.sessionId === splitSelectedItem.id);
+      if (!agent) return <div className="agents-detail-panel"><div className="agents-detail-placeholder">Agent not found</div></div>;
+      const team = teamGroups.find((g) => g.agents.some((a) => a.sessionId === agent.sessionId));
+      return (
+        <div className="agents-detail-panel">
+          {renderAgentCard(agent, team?.team)}
+        </div>
+      );
+    };
+
+    return (
+      <>
+        {renderFilterActions()}
+        <div className="agents-split-panel">
+          {renderLeftPanel()}
+          {renderRightPanel()}
+        </div>
+      </>
+    );
+  };
+
+  // === Main render dispatch ===
+  const renderViewBody = () => {
+    switch (viewMode) {
+      case "cards": return renderOriginal();
+      case "compact": return renderAccordion();
+      case "teams": return renderDashboardOverview();
+      case "split": return renderSplitPanel();
+    }
+  };
+
+  const renderViewSidebar = () => (
+    <div className="toggle-sidebar">
+      {VIEW_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          className={`toggle-sidebar-btn${viewMode === opt.value ? " active" : ""}`}
+          onClick={() => setViewMode(opt.value)}
+          title={opt.label}
+        >
+          {opt.icon}
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderControls = () => (
+    <div className="view-controls">
+      <div className="status-filters">
+        {(["all", "active", "idle", "waiting", "ended"] as StatusFilter[]).map((s) => (
+          <button
+            key={s}
+            className={`filter-pill${statusFilter === s ? " active" : ""}`}
+            onClick={() => setStatusFilter(s)}
+          >
+            {s === "all" ? "All" : STATUS_LABELS[s]}
+          </button>
+        ))}
+      </div>
+      <span className="threshold-control">
+        active &lt;
+        <select
+          value={threshold}
+          onChange={(e) => onThresholdChange(Number(e.target.value))}
+          className="threshold-select"
+        >
+          {THRESHOLD_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </span>
+      <select
+        className="sort-select"
+        value={sortBy}
+        onChange={(e) => setSortBy(e.target.value as SortBy)}
+      >
+        <option value="status">Sort: Status</option>
+        <option value="activity">Sort: Activity</option>
+        <option value="name">Sort: Name</option>
+      </select>
+      <input
+        className="view-search"
+        type="text"
+        placeholder="Search agents..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+      />
+    </div>
+  );
+
+  return (
+    <div className="view-container view-container--sidebar">
+      {renderViewSidebar()}
+      <div className="view-container-main">
+        <div className="view-header">
+          <div className="view-title-row">
+            <h2 className="view-title">AGENTS</h2>
+            <span className="view-subtitle">
+              <span style={{ color: "#3fb950" }}>{activeCount} active</span>
+              {" / "}
+              <span style={{ color: "#d29922" }}>{idleCount} idle</span>
+              {" / "}
+              <span>{agents.length} total</span>
+            </span>
+          </div>
+          {renderControls()}
+        </div>
+        <div className="view-body">
+          {renderViewBody()}
+        </div>
       </div>
     </div>
   );
