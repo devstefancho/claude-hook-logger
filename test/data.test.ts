@@ -331,6 +331,91 @@ describe("buildAgentList", () => {
     assert.equal(result[0].lastToolName, "Write");
   });
 
+  it("detects unresolved permission from Notification with 'permission' keyword", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: nowIso, cwd: "/p" },
+      { event: "Notification", session_id: "s1", ts: nowIso, data: { message: "Claude needs your permission to use Bash" } },
+    ];
+    const result = buildAgentList(events, new Map());
+    assert.equal(result[0].status, "waiting");
+    assert.equal(result[0].permissionMessage, "Claude needs your permission to use Bash");
+  });
+
+  it("detects unresolved permission from Notification with 'approval' keyword", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: nowIso, cwd: "/p" },
+      { event: "Notification", session_id: "s1", ts: nowIso, data: { message: "Claude Code needs your approval for the plan" } },
+    ];
+    const result = buildAgentList(events, new Map());
+    assert.equal(result[0].status, "waiting");
+    assert.equal(result[0].permissionMessage, "Claude Code needs your approval for the plan");
+  });
+
+  it("detects unresolved permission from PermissionRequest event", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: nowIso, cwd: "/p" },
+      { event: "PermissionRequest", session_id: "s1", ts: nowIso, data: {} },
+    ];
+    const result = buildAgentList(events, new Map());
+    assert.equal(result[0].status, "waiting");
+    assert.equal(result[0].permissionMessage, "Waiting for approval");
+  });
+
+  it("resolves permission when PostToolUse occurs after PermissionRequest", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const t2 = "2026-01-01T00:00:02Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: t1, cwd: "/p" },
+      { event: "PermissionRequest", session_id: "s1", ts: t1, data: {} },
+      { event: "PostToolUse", session_id: "s1", ts: t2, data: { tool_name: "Bash" } },
+    ];
+    const result = buildAgentList(events, new Map());
+    assert.equal(result[0].permissionMessage, null);
+    assert.notEqual(result[0].status, "waiting");
+  });
+
+  it("resolves permission when SessionStart (resume) occurs after PermissionRequest", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const t2 = "2026-01-01T00:00:02Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: t1, cwd: "/p" },
+      { event: "PermissionRequest", session_id: "s1", ts: t1, data: {} },
+      { event: "SessionStart", session_id: "s1", ts: t2, cwd: "/p", data: { source: "resume" } },
+    ];
+    const result = buildAgentList(events, new Map());
+    assert.equal(result[0].permissionMessage, null);
+  });
+
+  it("sets justCompleted true when Stop without stop_hook_active is recent", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: nowIso, cwd: "/p" },
+      { event: "Stop", session_id: "s1", ts: nowIso, data: { stop_hook_active: false } },
+    ];
+    const result = buildAgentList(events, new Map());
+    assert.equal(result[0].justCompleted, true);
+  });
+
+  it("sets latestUserPrompt from UserPromptSubmit event", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: nowIso, cwd: "/p" },
+      { event: "UserPromptSubmit", session_id: "s1", ts: nowIso, data: { prompt: "Fix the bug" } },
+    ];
+    const result = buildAgentList(events, new Map());
+    assert.equal(result[0].latestUserPrompt, "Fix the bug");
+  });
+
+  it("does not resolve permission when PreToolUse has same timestamp as PermissionRequest", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: t1, cwd: "/p" },
+      { event: "PreToolUse", session_id: "s1", ts: t1, data: { tool_name: "Grep" } },
+      { event: "PermissionRequest", session_id: "s1", ts: t1, data: {} },
+    ];
+    const result = buildAgentList(events, new Map());
+    assert.equal(result[0].status, "waiting");
+    assert.equal(result[0].permissionMessage, "Waiting for approval");
+  });
+
   it("sorts agents by status order then lastActivity", () => {
     const events: LogEvent[] = [
       // ended session

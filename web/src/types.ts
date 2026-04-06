@@ -65,6 +65,9 @@ export interface AgentInfo {
   summary: string | null;
   recentPrompts: string[];
   pid: number | null;
+  justCompleted: boolean;
+  permissionMessage: string | null;
+  latestUserPrompt: string | null;
 }
 
 export interface TeamMember {

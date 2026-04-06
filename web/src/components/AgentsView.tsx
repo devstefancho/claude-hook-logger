@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useUrlState } from "../hooks/useUrlState";
+import type { VariantType } from "../App";
 import type { AgentInfo, SessionInfo, TeamInfo } from "../types";
 import type { TeamGroup } from "../hooks/useAgents";
 import { formatRelativeTime, truncate } from "../utils/format";
@@ -21,8 +22,8 @@ const STATUS_LABELS: Record<AgentInfo["status"], string> = {
 
 const STATUS_PRIORITY: Record<AgentInfo["status"], number> = {
   active: 0,
-  idle: 1,
-  waiting: 2,
+  waiting: 1,
+  idle: 2,
   ended: 3,
 };
 
@@ -78,6 +79,7 @@ interface AgentCardProps {
   role: string | null;
   isSelected: boolean;
   copiedId: string | null;
+  variant: VariantType;
   onCopy: (text: string, id: string) => void;
   onSelectSession: (sid: string) => void;
   onToggleSessionFilter: (sid: string) => void;
@@ -91,6 +93,7 @@ function AgentCard({
   role,
   isSelected,
   copiedId,
+  variant,
   onCopy,
   onToggleSessionFilter,
   onGenerateSummary,
@@ -101,12 +104,51 @@ function AgentCard({
   const lastPrompt = agent.recentPrompts.length > 0
     ? agent.recentPrompts[agent.recentPrompts.length - 1]
     : null;
+  const [toastVisible, setToastVisible] = useState(false);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+
+  // Variant B: auto-dismiss toast for justCompleted
+  useEffect(() => {
+    if (variant === "b" && agent.justCompleted) {
+      setToastVisible(true);
+      const timer = setTimeout(() => setToastVisible(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [variant, agent.justCompleted]);
+
+  const variantClasses = [
+    variant === "a" && agent.justCompleted ? " just-completed" : "",
+    variant === "a" && agent.permissionMessage ? " permission-waiting" : "",
+    variant === "c" && (agent.justCompleted || agent.permissionMessage || agent.latestUserPrompt) ? " has-indicators" : "",
+  ].join("");
 
   return (
     <div
-      className={`agent-card-v2${isSelected ? " selected" : ""} status-${agent.status}`}
+      className={`agent-card-v2${isSelected ? " selected" : ""} status-${agent.status}${variantClasses}`}
       style={{ "--status-color": color, "--session-color": sessionColor } as React.CSSProperties}
     >
+      {/* Variant B: Permission banner (fixed top) */}
+      {variant === "b" && agent.permissionMessage && (
+        <div className="agent-banner-permission">
+          <span>&#9888; PERMISSION NEEDED: {truncate(agent.permissionMessage, 80)}</span>
+          <button className="banner-btn" onClick={() => onOpenTmux(agent.sessionId)}>Go to tmux</button>
+        </div>
+      )}
+
+      {/* Variant B: Completion toast overlay */}
+      {variant === "b" && toastVisible && (
+        <div className="agent-toast-overlay">&#10003; COMPLETED</div>
+      )}
+
+      {/* Variant C: Dot indicators */}
+      {variant === "c" && (
+        <div className="agent-dot-indicators">
+          {agent.justCompleted && <span className="indicator-dot indicator-stop" title="Just completed" />}
+          {agent.permissionMessage && <span className="indicator-dot indicator-permission" title="Permission needed" />}
+          {agent.latestUserPrompt && <span className="indicator-dot indicator-prompt" title="User prompt" />}
+        </div>
+      )}
+
       <div className="agent-card-header">
         <span className="agent-dot-v2" style={{ backgroundColor: color }} />
         <span className="agent-name-v2">
@@ -176,6 +218,25 @@ function AgentCard({
         </button>
       </div>
 
+      {/* Variant A: Inline banners */}
+      {variant === "a" && agent.justCompleted && (
+        <div className="agent-completion-banner">&#10003; COMPLETED</div>
+      )}
+      {variant === "a" && agent.permissionMessage && (
+        <div className="agent-permission-banner">&#9888; PERMISSION NEEDED: {truncate(agent.permissionMessage, 80)}</div>
+      )}
+      {variant === "a" && agent.latestUserPrompt && (
+        <div className="agent-user-prompt">USER&gt; {truncate(agent.latestUserPrompt, 100)}</div>
+      )}
+
+      {/* Variant B: Collapsible prompt */}
+      {variant === "b" && agent.latestUserPrompt && (
+        <div className="agent-prompt-toggle" onClick={() => setPromptExpanded((v) => !v)}>
+          <span>{promptExpanded ? "▾" : "▸"} USER PROMPT</span>
+          {promptExpanded && <div className="agent-prompt-toggle-body">{agent.latestUserPrompt}</div>}
+        </div>
+      )}
+
       <div className="agent-actions-v2">
         <button
           className="action-btn"
@@ -216,8 +277,10 @@ interface AgentsViewProps {
   onClearSessionFilter: () => void;
   onGenerateSummary: (sid: string) => void;
   onOpenTmux: (sid: string) => void;
+  viewResetKey: number;
   threshold: number;
   onThresholdChange: (value: number) => void;
+  variant: VariantType;
 }
 
 // === Compact: Mini Card (Accordion collapsed state) ===
@@ -339,8 +402,10 @@ export function AgentsView({
   onClearSessionFilter,
   onGenerateSummary,
   onOpenTmux,
+  viewResetKey,
   threshold,
   onThresholdChange,
+  variant,
 }: AgentsViewProps) {
   const [searchQuery, setSearchQuery] = useUrlState<string>("agentSearch", "");
   const [statusFilter, setStatusFilter] = useUrlState<StatusFilter>("status", "all");
@@ -355,6 +420,15 @@ export function AgentsView({
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [splitSelectedItem, setSplitSelectedItem] = useState<{ type: "team" | "agent"; id: string } | null>(null);
   const [, setTick] = useState(0);
+
+  // Reset selectedTeam when sidebar re-clicks the same view
+  const prevResetKey = useRef(viewResetKey);
+  useEffect(() => {
+    if (prevResetKey.current === viewResetKey) return;
+    prevResetKey.current = viewResetKey;
+    setSelectedTeam(null);
+    setSplitSelectedItem(null);
+  }, [viewResetKey]);
 
   // Escape key to go back to overview
   useEffect(() => {
@@ -442,6 +516,7 @@ export function AgentsView({
 
   const cardProps = {
     copiedId,
+    variant,
     onCopy: handleCopy,
     onSelectSession,
     onToggleSessionFilter,

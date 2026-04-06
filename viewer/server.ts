@@ -369,6 +369,25 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
     }
     /* c8 ignore stop */
 
+    if (pathname === "/api/activity-feed") {
+      const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+      const events = parseLogFile(logDir, "hook-events.jsonl");
+      const feed: Array<{ ts: string; sessionId: string; type: string; message: string }> = [];
+      // Scan events in reverse for most recent first
+      for (let i = events.length - 1; i >= 0 && feed.length < limit; i--) {
+        const ev = events[i];
+        const sid = ev.session_id || "unknown";
+        if (ev.event === "Stop" && !ev.data?.stop_hook_active) {
+          feed.push({ ts: ev.ts, sessionId: sid, type: "stop", message: "Task completed" });
+        } else if (ev.event === "Notification" && ev.data?.message && String(ev.data.message).includes("permission")) {
+          feed.push({ ts: ev.ts, sessionId: sid, type: "permission", message: String(ev.data.message) });
+        } else if (ev.event === "UserPromptSubmit" && ev.data?.prompt) {
+          feed.push({ ts: ev.ts, sessionId: sid, type: "prompt", message: String(ev.data.prompt) });
+        }
+      }
+      return sendJson(res, { feed });
+    }
+
     if (pathname === "/api/chat" && req.method === "POST") {
       return handleChat(req, res, logDir, mcpServer, queryFn);
     }

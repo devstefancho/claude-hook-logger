@@ -362,6 +362,9 @@ export interface AgentInfo {
   summary: string | null;
   recentPrompts: string[];
   pid: number | null;
+  justCompleted: boolean;
+  permissionMessage: string | null;
+  latestUserPrompt: string | null;
 }
 /* c8 ignore stop */
 
@@ -433,15 +436,38 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
 
   // Pre-index: last significant event per session, last tool event per session
   const lastSignificantBySession = new Map<string, LogEvent>();
+  const lastPermResolveBySession = new Map<string, LogEvent>();
   const lastToolBySession = new Map<string, LogEvent>();
+  const lastStopBySession = new Map<string, LogEvent>();
+  const lastPermissionBySession = new Map<string, LogEvent>();
+  const lastUserPromptBySession = new Map<string, LogEvent>();
   for (const ev of events) {
     /* c8 ignore next -- branch: session_id always present in test data */
     const sid = ev.session_id || "unknown";
     if (ev.event === "Stop" || ev.event === "PreToolUse" || ev.event === "PostToolUse" || ev.event === "UserPromptSubmit") {
       lastSignificantBySession.set(sid, ev);
     }
+    // Permission resolution: only events that prove permission was resolved
+    // PreToolUse is excluded because it fires BEFORE the permission check
+    // SessionStart included because resume clears stale permission state
+    if (ev.event === "Stop" || ev.event === "PostToolUse" || ev.event === "UserPromptSubmit" || ev.event === "SessionStart") {
+      lastPermResolveBySession.set(sid, ev);
+    }
     if ((ev.event === "PreToolUse" || ev.event === "PostToolUse") && ev.data?.tool_name) {
       lastToolBySession.set(sid, ev);
+    }
+    if (ev.event === "Stop") {
+      lastStopBySession.set(sid, ev);
+    }
+    if (ev.event === "Notification" && ev.data?.message &&
+        (String(ev.data.message).includes("permission") || String(ev.data.message).includes("approval"))) {
+      lastPermissionBySession.set(sid, ev);
+    }
+    if (ev.event === "PermissionRequest") {
+      lastPermissionBySession.set(sid, ev);
+    }
+    if (ev.event === "UserPromptSubmit" && ev.data?.prompt) {
+      lastUserPromptBySession.set(sid, ev);
     }
   }
 
@@ -487,6 +513,24 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
     const startedAt = claudeSession?.startedAt || new Date(sess.firstTs).getTime();
     const sessionDuration = now - startedAt;
 
+    // Derive new status fields
+    const lastStop = lastStopBySession.get(sess.id);
+    const justCompleted = lastStop && !lastStop.data?.stop_hook_active ? (now - new Date(lastStop.ts).getTime()) <= 30000 : false;
+    const lastPerm = lastPermissionBySession.get(sess.id);
+    const lastResolve = lastPermResolveBySession.get(sess.id);
+    const permResolved = lastPerm && lastResolve &&
+      new Date(lastResolve.ts).getTime() > new Date(lastPerm.ts).getTime();
+    const permissionMessage = (lastPerm && !permResolved)
+      ? String(lastPerm.data?.message || "Waiting for approval")
+      : null;
+
+    // Override status to "waiting" if permission is unresolved
+    if (permissionMessage && status !== "ended") {
+      status = "waiting";
+    }
+    const lastPrompt = lastUserPromptBySession.get(sess.id);
+    const latestUserPrompt = lastPrompt?.data?.prompt ? String(lastPrompt.data.prompt) : null;
+
     agents.push({
       sessionId: sess.id,
       name: claudeSession?.name || null,
@@ -501,6 +545,9 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
       summary: null,
       recentPrompts,
       pid: claudeSession?.pid || null,
+      justCompleted,
+      permissionMessage,
+      latestUserPrompt,
     });
   }
 

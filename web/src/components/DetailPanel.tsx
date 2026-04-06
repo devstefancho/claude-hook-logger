@@ -1,6 +1,6 @@
 import type { LogEvent, Summary, AgentInfo, SessionInfo } from "../types";
 import type { TeamGroup } from "../hooks/useAgents";
-import type { SidebarView } from "../App";
+import type { SidebarView, VariantType } from "../App";
 import { AgentsView } from "./AgentsView";
 import { ToolsView } from "./ToolsView";
 import { SkillsView } from "./SkillsView";
@@ -27,6 +27,8 @@ interface DetailPanelProps {
   onToolClick: (name: string) => void;
   onSkillClick: (name: string) => void;
   loading: boolean;
+  viewResetKey: number;
+  variant: VariantType;
   threshold: number;
   onThresholdChange: (value: number) => void;
 }
@@ -47,6 +49,8 @@ export function DetailPanel({
   onClearSessionFilter,
   highlightIdx,
   loading,
+  viewResetKey,
+  variant,
   onGenerateSummary,
   onOpenTmux,
   onToolClick,
@@ -63,6 +67,7 @@ export function DetailPanel({
           ungroupedAgents={ungroupedAgents}
           sessions={sessions}
           loading={loading}
+          viewResetKey={viewResetKey}
           selectedSessions={selectedSessions}
           onSelectSession={onSelectSession}
           onToggleSessionFilter={onToggleSessionFilter}
@@ -72,6 +77,7 @@ export function DetailPanel({
           onOpenTmux={onOpenTmux}
           threshold={threshold}
           onThresholdChange={onThresholdChange}
+          variant={variant}
         />
       )}
       {activeView === "tools" && (
