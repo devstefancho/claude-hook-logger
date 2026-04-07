@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const isWindows = process.platform === 'win32';
 const PROJECT_ROOT = new URL('../../', import.meta.url).pathname.replace(/\/$/, '');
 
 export type LogLine = Record<string, unknown> & { data: Record<string, unknown> };
@@ -27,15 +28,24 @@ export function createTempHome(): string {
   mkdirSync(logsDir, { recursive: true });
   mkdirSync(hooksDir, { recursive: true });
 
-  const eventLoggerSrc = join(PROJECT_ROOT, 'hooks', 'event-logger.sh');
-  const rotateLogsSrc = join(PROJECT_ROOT, 'hooks', 'rotate-logs.sh');
-  const eventLoggerDst = join(hooksDir, 'event-logger.sh');
-  const rotateLogsDst = join(hooksDir, 'rotate-logs.sh');
+  if (isWindows) {
+    // On Windows, use Node.js hook scripts
+    const eventLoggerSrc = join(PROJECT_ROOT, 'hooks', 'event-logger.js');
+    const rotateLogsSrc = join(PROJECT_ROOT, 'hooks', 'rotate-logs.js');
+    writeFileSync(join(hooksDir, 'event-logger.js'), readFileSync(eventLoggerSrc));
+    writeFileSync(join(hooksDir, 'rotate-logs.js'), readFileSync(rotateLogsSrc));
+  } else {
+    // On Unix, use bash hook scripts
+    const eventLoggerSrc = join(PROJECT_ROOT, 'hooks', 'event-logger.sh');
+    const rotateLogsSrc = join(PROJECT_ROOT, 'hooks', 'rotate-logs.sh');
+    const eventLoggerDst = join(hooksDir, 'event-logger.sh');
+    const rotateLogsDst = join(hooksDir, 'rotate-logs.sh');
 
-  writeFileSync(eventLoggerDst, readFileSync(eventLoggerSrc));
-  execFileSync('chmod', ['+x', eventLoggerDst]);
-  writeFileSync(rotateLogsDst, readFileSync(rotateLogsSrc));
-  execFileSync('chmod', ['+x', rotateLogsDst]);
+    writeFileSync(eventLoggerDst, readFileSync(eventLoggerSrc));
+    execFileSync('chmod', ['+x', eventLoggerDst]);
+    writeFileSync(rotateLogsDst, readFileSync(rotateLogsSrc));
+    execFileSync('chmod', ['+x', rotateLogsDst]);
+  }
 
   return tempHome;
 }
@@ -45,18 +55,32 @@ export function cleanupTempHome(tempHome: string): void {
 }
 
 export function runEventLogger(tempHome: string, input: Record<string, unknown> | string): EventLoggerResult {
-  const scriptPath = join(tempHome, '.claude', 'hooks', 'event-logger.sh');
   const stdinData = typeof input === 'string' ? input : JSON.stringify(input);
+  let result;
 
-  const result = spawnSync('bash', [scriptPath], {
-    input: stdinData,
-    env: {
-      ...process.env,
-      HOME: tempHome,
-      PATH: process.env.PATH,
-    },
-    timeout: 10000,
-  });
+  if (isWindows) {
+    const scriptPath = join(tempHome, '.claude', 'hooks', 'event-logger.js');
+    result = spawnSync('node', [scriptPath], {
+      input: stdinData,
+      env: {
+        ...process.env,
+        HOME: tempHome,
+        PATH: process.env.PATH,
+      },
+      timeout: 10000,
+    });
+  } else {
+    const scriptPath = join(tempHome, '.claude', 'hooks', 'event-logger.sh');
+    result = spawnSync('bash', [scriptPath], {
+      input: stdinData,
+      env: {
+        ...process.env,
+        HOME: tempHome,
+        PATH: process.env.PATH,
+      },
+      timeout: 10000,
+    });
+  }
 
   const logFile = join(tempHome, '.claude', 'hook-logger', 'hook-events.jsonl');
   const logLines: LogLine[] = [];
@@ -80,16 +104,29 @@ export function runEventLogger(tempHome: string, input: Record<string, unknown> 
 }
 
 export function runRotateLogs(tempHome: string): RotateLogsResult {
-  const scriptPath = join(tempHome, '.claude', 'hooks', 'rotate-logs.sh');
+  let result;
 
-  const result = spawnSync('bash', [scriptPath], {
-    env: {
-      ...process.env,
-      HOME: tempHome,
-      PATH: process.env.PATH,
-    },
-    timeout: 10000,
-  });
+  if (isWindows) {
+    const scriptPath = join(tempHome, '.claude', 'hooks', 'rotate-logs.js');
+    result = spawnSync('node', [scriptPath], {
+      env: {
+        ...process.env,
+        HOME: tempHome,
+        PATH: process.env.PATH,
+      },
+      timeout: 10000,
+    });
+  } else {
+    const scriptPath = join(tempHome, '.claude', 'hooks', 'rotate-logs.sh');
+    result = spawnSync('bash', [scriptPath], {
+      env: {
+        ...process.env,
+        HOME: tempHome,
+        PATH: process.env.PATH,
+      },
+      timeout: 10000,
+    });
+  }
 
   return {
     exitCode: result.status,

@@ -2,12 +2,13 @@
 // CLI entry point for the Hook Events Log Viewer server
 import { execSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "./server.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_LOG_DIR = path.join(process.env.HOME || "", ".claude", "hook-logger");
+const DEFAULT_LOG_DIR = path.join(os.homedir(), ".claude", "hook-logger");
 const DEFAULT_PORT = 7777;
 
 const PORT = parseInt(process.argv[2] || String(DEFAULT_PORT), 10);
@@ -31,17 +32,28 @@ server.on("error", (err: NodeJS.ErrnoException) => {
     retried = true;
     console.log(`Port ${PORT} is in use. Attempting to kill existing process...`);
     try {
-      const pid = execSync(`lsof -ti :${PORT}`, { encoding: "utf-8" }).trim();
-      if (pid) {
-        execSync(`kill -9 ${pid}`);
-        console.log(`Killed process ${pid}`);
-        setTimeout(startServer, 1000);
-        return;
+      if (process.platform === "win32") {
+        const output = execSync(`netstat -ano | findstr :${PORT} | findstr LISTENING`, { encoding: "utf-8" }).trim();
+        const pid = output.split(/\s+/).pop();
+        if (pid) {
+          execSync(`taskkill /PID ${pid} /F`);
+          console.log(`Killed process ${pid}`);
+          setTimeout(startServer, 1000);
+          return;
+        }
+      } else {
+        const pid = execSync(`lsof -ti :${PORT}`, { encoding: "utf-8" }).trim();
+        if (pid) {
+          execSync(`kill -9 ${pid}`);
+          console.log(`Killed process ${pid}`);
+          setTimeout(startServer, 1000);
+          return;
+        }
       }
     } catch {
-      // lsof or kill failed
+      // port-kill failed
     }
-    console.error(`Port ${PORT} is still in use. Try: sudo kill -9 $(lsof -ti :${PORT})`);
+    console.error(`Port ${PORT} is still in use.`);
     process.exit(1);
   }
   throw err;

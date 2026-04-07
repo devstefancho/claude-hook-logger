@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
 
@@ -386,12 +387,13 @@ export function getClaudeSessions(sessionsDir: string): Map<string, ClaudeSessio
 }
 
 function mangleCwd(cwd: string): string {
-  return "-" + cwd.replace(/^\//g, "").replace(/\//g, "-");
+  const normalized = cwd.replace(/\\/g, "/").replace(/^[A-Z]:\//i, "/");
+  return "-" + normalized.replace(/^\//g, "").replace(/\//g, "-");
 }
 
 export function getRecentPrompts(sessionId: string, cwd: string, count = 3): string[] {
   /* c8 ignore next -- branch: HOME always set in test env */
-  const projectsDir = path.join(process.env.HOME || "", ".claude", "projects");
+  const projectsDir = path.join(os.homedir(), ".claude", "projects");
   const mangledCwd = mangleCwd(cwd);
   const sessionFile = path.join(projectsDir, mangledCwd, `${sessionId}.jsonl`);
   if (!fs.existsSync(sessionFile)) return [];
@@ -421,8 +423,8 @@ export function getRecentPrompts(sessionId: string, cwd: string, count = 3): str
 }
 
 export function extractProjectName(cwd: string): string {
-  const home = process.env.HOME || "";
-  if (home && (cwd === home || cwd.startsWith(home + "/"))) {
+  const home = os.homedir();
+  if (home && (cwd === home || cwd.startsWith(home + "/") || cwd.startsWith(home + "\\"))) {
     return "~" + cwd.slice(home.length);
   }
   return cwd;
@@ -593,6 +595,7 @@ interface SessionCandidate {
 
 /* c8 ignore start -- OS-level pgrep call, not testable in unit tests */
 function getDescendantPids(pid: number): number[] {
+  if (process.platform === "win32") return [];
   const result: number[] = [];
   try {
     const children = execSync(`pgrep -P ${pid}`, {
@@ -648,20 +651,22 @@ export function getTeams(teamsDir: string, sessionsDir?: string): TeamInfo[] {
   // Build tmux paneId → panePid map (best-effort, tmux may not be available)
   /* c8 ignore start -- tmux OS call, not testable in unit tests */
   const panePidMap = new Map<string, number>();
-  try {
-    const paneOutput = execSync("tmux list-panes -a -F '#{pane_id} #{pane_pid}'", {
-      encoding: "utf-8",
-      timeout: 3000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    for (const line of paneOutput.split("\n")) {
-      const parts = line.trim().split(" ");
-      if (parts.length >= 2) {
-        panePidMap.set(parts[0], parseInt(parts[1], 10));
+  if (process.platform !== "win32") {
+    try {
+      const paneOutput = execSync("tmux list-panes -a -F '#{pane_id} #{pane_pid}'", {
+        encoding: "utf-8",
+        timeout: 3000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      for (const line of paneOutput.split("\n")) {
+        const parts = line.trim().split(" ");
+        if (parts.length >= 2) {
+          panePidMap.set(parts[0], parseInt(parts[1], 10));
+        }
       }
+    } catch {
+      // tmux not available
     }
-  } catch {
-    // tmux not available
   }
   /* c8 ignore stop */
 

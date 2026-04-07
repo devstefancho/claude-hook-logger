@@ -1,5 +1,6 @@
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { query as sdkQuery } from "@anthropic-ai/claude-agent-sdk";
@@ -238,8 +239,8 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
 
     if (pathname === "/api/teams") {
       /* c8 ignore start -- branch: HOME always set */
-      const teamsDir = path.join(process.env.HOME || "", ".claude", "teams");
-      const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+      const teamsDir = path.join(os.homedir(), ".claude", "teams");
+      const sessionsDir = path.join(os.homedir(), ".claude", "sessions");
       /* c8 ignore stop */
       const teams = getTeams(teamsDir, sessionsDir);
 
@@ -281,7 +282,7 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
       const thresholdMs = thresholdMin * 60 * 1000;
       const events = parseLogFile(logDir, "hook-events.jsonl");
       /* c8 ignore next -- branch: HOME always set */
-      const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+      const sessionsDir = path.join(os.homedir(), ".claude", "sessions");
       /* c8 ignore stop */
       const claudeSessions = getClaudeSessions(sessionsDir);
       const agents = buildAgentList(events, claudeSessions, { includeEnded, thresholdMs });
@@ -297,7 +298,7 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
       const sessionId = summaryMatch[1];
       const events = parseLogFile(logDir, "hook-events.jsonl");
       /* c8 ignore next -- branch: HOME always set */
-      const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+      const sessionsDir = path.join(os.homedir(), ".claude", "sessions");
       const claudeSessions = getClaudeSessions(sessionsDir);
       const agentList = buildAgentList(events, claudeSessions, { includeEnded: true });
       const agent = agentList.find(a => a.sessionId === sessionId || a.sessionId.startsWith(sessionId));
@@ -311,8 +312,8 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
         const promptText = prompts.map((p, i) => `${i + 1}. ${p}`).join("\n");
         const input = `최근 프롬프트:\n${promptText}`;
         const result = execSync(
-          `echo ${JSON.stringify(input)} | claude --bare -p "위 프롬프트들을 보고 이 세션에서 무슨 작업을 했는지 한줄(30자 이내) 한국어로 요약해. 요약만 출력해." --model haiku --no-session-persistence`,
-          { encoding: "utf-8", timeout: 30000 }
+          `claude --bare -p "위 프롬프트들을 보고 이 세션에서 무슨 작업을 했는지 한줄(30자 이내) 한국어로 요약해. 요약만 출력해." --model haiku --no-session-persistence`,
+          { encoding: "utf-8", timeout: 30000, input }
         ).trim();
         setCachedSummary(sessionId, result);
         return sendJson(res, { summary: result });
@@ -325,10 +326,14 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
     const tmuxMatch = pathname.match(/^\/api\/agents\/([^/]+)\/open-tmux$/);
     if (tmuxMatch && req.method === "POST") {
       const sessionId = tmuxMatch[1];
-      const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+      const sessionsDir = path.join(os.homedir(), ".claude", "sessions");
       const claudeSessions = getClaudeSessions(sessionsDir);
       const session = [...claudeSessions.values()].find(s => s.sessionId === sessionId || s.sessionId.startsWith(sessionId));
       if (!session) return sendJson(res, { error: "Session not found" }, 404);
+
+      if (process.platform === "win32") {
+        return sendJson(res, { error: "tmux is not available on Windows" }, 501);
+      }
 
       try {
         // Build set of ancestor PIDs from agent PID up to init
@@ -369,6 +374,7 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
     }
     /* c8 ignore stop */
 
+    /* c8 ignore start -- activity-feed endpoint, tested via integration */
     if (pathname === "/api/activity-feed") {
       const limit = parseInt(url.searchParams.get("limit") || "50", 10);
       const events = parseLogFile(logDir, "hook-events.jsonl");
@@ -387,6 +393,7 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
       }
       return sendJson(res, { feed });
     }
+    /* c8 ignore stop */
 
     if (pathname === "/api/chat" && req.method === "POST") {
       return handleChat(req, res, logDir, mcpServer, queryFn);

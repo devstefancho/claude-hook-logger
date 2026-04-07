@@ -11,6 +11,7 @@ import {
   buildAgentList,
 } from "./data.js";
 import type { LogEvent } from "./data.js";
+import os from "node:os";
 import path from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -173,7 +174,7 @@ export function handleSearchEvents(logDir: string, args: { event_type?: string; 
 
 export function handleListAgents(logDir: string, args: { status?: string }) {
   const events = getAllEvents(logDir);
-  const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+  const sessionsDir = path.join(os.homedir(), ".claude", "sessions");
   const claudeSessions = getClaudeSessions(sessionsDir);
   let agents = buildAgentList(events, claudeSessions);
 
@@ -200,7 +201,7 @@ export function handleListAgents(logDir: string, args: { status?: string }) {
 /* c8 ignore start -- branch: || fallbacks, tested via handler tests */
 export function handleGetAgentDetail(logDir: string, args: { session_id: string }) {
   const events = getAllEvents(logDir);
-  const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
+  const sessionsDir = path.join(os.homedir(), ".claude", "sessions");
   const claudeSessions = getClaudeSessions(sessionsDir);
   const agents = buildAgentList(events, claudeSessions);
   const agent = agents.find(a => a.sessionId === args.session_id || a.sessionId.startsWith(args.session_id));
