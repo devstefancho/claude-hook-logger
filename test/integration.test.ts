@@ -6,8 +6,6 @@ import os from "node:os";
 import { execSync } from "node:child_process";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname!, "..");
-const TSX_EXT = process.platform === "win32" ? "tsx.cmd" : "tsx";
-const TSX_BIN = path.join(PROJECT_ROOT, "node_modules", ".bin", TSX_EXT);
 const MERGE_SCRIPT = path.join(PROJECT_ROOT, "lib", "settings-merge-cli.ts");
 const HOOKS_CONFIG = path.join(PROJECT_ROOT, "hooks-config.json");
 
@@ -26,14 +24,14 @@ describe("integration: settings-merge CLI", () => {
 
   function runInstall(): string {
     return execSync(
-      `"${TSX_BIN}" ${MERGE_SCRIPT} install --config ${HOOKS_CONFIG} --settings ${settingsPath}`,
+      `node --import tsx/esm "${MERGE_SCRIPT}" install --config "${HOOKS_CONFIG}" --settings "${settingsPath}"`,
       { encoding: "utf-8", cwd: PROJECT_ROOT },
     );
   }
 
   function runUninstall(): string {
     return execSync(
-      `"${TSX_BIN}" ${MERGE_SCRIPT} uninstall --settings ${settingsPath} --pattern "event-logger\\.sh"`,
+      `node --import tsx/esm "${MERGE_SCRIPT}" uninstall --settings "${settingsPath}" --pattern "event-logger\\.sh"`,
       { encoding: "utf-8", cwd: PROJECT_ROOT },
     );
   }
