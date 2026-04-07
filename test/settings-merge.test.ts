@@ -475,7 +475,8 @@ describe('saveSettings', () => {
 
 // ─── 5. CLI integration ─────────────────────────────────────────────────────
 
-describe('CLI integration', () => {
+// tsx binary resolution fails on Windows with pnpm (symlink issue)
+describe('CLI integration', { skip: process.platform === 'win32' ? 'tsx symlinks broken on Windows with pnpm' : false }, () => {
   const tsxBin = path.resolve('node_modules', '.bin', 'tsx');
   const cliPath = path.resolve('lib/settings-merge-cli.ts');
   const configPath = path.resolve('hooks-config.json');
