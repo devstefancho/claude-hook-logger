@@ -13,7 +13,7 @@ import {
   buildChatContext,
   buildSummary,
 } from "../viewer/data.js";
-import type { LogEvent, ClaudeSession } from "../viewer/data.js";
+import type { LogEvent, ClaudeSession, TeamInfo } from "../viewer/data.js";
 
 // ---------------------------------------------------------------------------
 // extractProjectName tests
@@ -414,6 +414,195 @@ describe("buildAgentList", () => {
     const result = buildAgentList(events, new Map());
     assert.equal(result[0].status, "waiting");
     assert.equal(result[0].permissionMessage, "Waiting for approval");
+  });
+
+  it("detects waiting from worker_permission_prompt on parent session", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "parent", ts: t1, cwd: "/p" },
+      { event: "SessionStart", session_id: "worker1", ts: t1, cwd: "/p" },
+      { event: "Notification", session_id: "parent", ts: nowIso, data: {
+        notification_type: "worker_permission_prompt",
+        message: "tester needs permission for Bash",
+      } },
+    ];
+    const teams: TeamInfo[] = [{
+      name: "test-team",
+      description: "",
+      createdAt: 0,
+      leadSessionId: "parent",
+      members: [{ agentId: "a1", name: "tester", sessionId: "worker1" }],
+    }];
+    const result = buildAgentList(events, new Map(), { teams });
+    const worker = result.find(a => a.sessionId === "worker1");
+    assert.equal(worker?.status, "waiting");
+    assert.equal(worker?.permissionMessage, "tester needs permission for Bash");
+  });
+
+  it("resolves worker permission when worker has PostToolUse after notification", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const t2 = "2026-01-01T00:00:02Z";
+    const t3 = "2026-01-01T00:00:03Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "parent", ts: t1, cwd: "/p" },
+      { event: "SessionStart", session_id: "worker1", ts: t1, cwd: "/p" },
+      { event: "Notification", session_id: "parent", ts: t2, data: {
+        notification_type: "worker_permission_prompt",
+        message: "tester needs permission for Bash",
+      } },
+      { event: "PostToolUse", session_id: "worker1", ts: t3, data: { tool_name: "Bash" } },
+    ];
+    const teams: TeamInfo[] = [{
+      name: "test-team",
+      description: "",
+      createdAt: 0,
+      leadSessionId: "parent",
+      members: [{ agentId: "a1", name: "tester", sessionId: "worker1" }],
+    }];
+    const result = buildAgentList(events, new Map(), { teams });
+    const worker = result.find(a => a.sessionId === "worker1");
+    assert.notEqual(worker?.status, "waiting");
+    assert.equal(worker?.permissionMessage, null);
+  });
+
+  it("matches worker permission by prefix when names differ (e.g., tester vs tester2)", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "parent", ts: t1, cwd: "/p" },
+      { event: "SessionStart", session_id: "worker1", ts: t1, cwd: "/p" },
+      { event: "Notification", session_id: "parent", ts: nowIso, data: {
+        notification_type: "worker_permission_prompt",
+        message: "tester needs permission for Glob",
+      } },
+    ];
+    const teams: TeamInfo[] = [{
+      name: "test-team",
+      description: "",
+      createdAt: 0,
+      leadSessionId: "parent",
+      members: [{ agentId: "a1", name: "tester2", sessionId: "worker1" }],
+    }];
+    const result = buildAgentList(events, new Map(), { teams });
+    const worker = result.find(a => a.sessionId === "worker1");
+    assert.equal(worker?.status, "waiting");
+    assert.equal(worker?.permissionMessage, "tester needs permission for Glob");
+  });
+
+  it("detects waiting from dangling PreToolUse for idle team member (not lead)", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "parent", ts: t1, cwd: "/p" },
+      { event: "SessionStart", session_id: "worker1", ts: t1, cwd: "/p" },
+      // worker1 has PreToolUse without PostToolUse (dangling), old timestamp → idle
+      { event: "PreToolUse", session_id: "worker1", ts: oldIso, data: { tool_name: "Glob", tool_use_id: "tu1" } },
+    ];
+    const teams: TeamInfo[] = [{
+      name: "test-team",
+      description: "",
+      createdAt: 0,
+      leadSessionId: "parent",
+      members: [
+        { agentId: "lead", name: "team-lead", sessionId: "parent" },
+        { agentId: "a1", name: "tester", sessionId: "worker1" },
+      ],
+    }];
+    const result = buildAgentList(events, new Map(), { teams });
+    const worker = result.find(a => a.sessionId === "worker1");
+    assert.equal(worker?.status, "waiting");
+    assert.equal(worker?.permissionMessage, "Waiting for permission: Glob");
+  });
+
+  it("does not apply dangling PreToolUse to active team member (tool in progress)", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "parent", ts: t1, cwd: "/p" },
+      { event: "SessionStart", session_id: "worker1", ts: t1, cwd: "/p" },
+      // worker1 has recent dangling PreToolUse → "active" status, not "waiting"
+      { event: "PreToolUse", session_id: "worker1", ts: nowIso, data: { tool_name: "Bash", tool_use_id: "tu1" } },
+    ];
+    const teams: TeamInfo[] = [{
+      name: "test-team",
+      description: "",
+      createdAt: 0,
+      leadSessionId: "parent",
+      members: [
+        { agentId: "lead", name: "team-lead", sessionId: "parent" },
+        { agentId: "a1", name: "tester", sessionId: "worker1" },
+      ],
+    }];
+    const result = buildAgentList(events, new Map(), { teams });
+    const worker = result.find(a => a.sessionId === "worker1");
+    assert.equal(worker?.status, "active");
+  });
+
+  it("does not apply dangling PreToolUse to team lead", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "parent", ts: t1, cwd: "/p" },
+      { event: "PreToolUse", session_id: "parent", ts: nowIso, data: { tool_name: "Bash", tool_use_id: "tu1" } },
+    ];
+    const teams: TeamInfo[] = [{
+      name: "test-team",
+      description: "",
+      createdAt: 0,
+      leadSessionId: "parent",
+      members: [{ agentId: "lead", name: "team-lead", sessionId: "parent" }],
+    }];
+    const result = buildAgentList(events, new Map(), { teams });
+    const lead = result.find(a => a.sessionId === "parent");
+    // Lead should NOT be overridden to waiting by dangling PreToolUse
+    assert.notEqual(lead?.status, "waiting");
+  });
+
+  it("does not apply dangling PreToolUse when PostToolUse resolves it", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const t2 = "2026-01-01T00:00:02Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "parent", ts: t1, cwd: "/p" },
+      { event: "SessionStart", session_id: "worker1", ts: t1, cwd: "/p" },
+      { event: "PreToolUse", session_id: "worker1", ts: t1, data: { tool_name: "Glob", tool_use_id: "tu1" } },
+      { event: "PostToolUse", session_id: "worker1", ts: t2, data: { tool_name: "Glob", tool_use_id: "tu1" } },
+    ];
+    const teams: TeamInfo[] = [{
+      name: "test-team",
+      description: "",
+      createdAt: 0,
+      leadSessionId: "parent",
+      members: [
+        { agentId: "lead", name: "team-lead", sessionId: "parent" },
+        { agentId: "a1", name: "tester", sessionId: "worker1" },
+      ],
+    }];
+    const result = buildAgentList(events, new Map(), { teams });
+    const worker = result.find(a => a.sessionId === "worker1");
+    assert.notEqual(worker?.status, "waiting");
+  });
+
+  it("worker_permission_prompt does not make parent stuck in waiting", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const t2 = "2026-01-01T00:00:02Z";
+    const t3 = "2026-01-01T00:00:03Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "parent", ts: t1, cwd: "/p" },
+      { event: "PostToolUse", session_id: "parent", ts: t2, data: { tool_name: "Bash" } },
+      // worker_permission_prompt comes AFTER parent's last resolve event
+      { event: "Notification", session_id: "parent", ts: t3, data: {
+        notification_type: "worker_permission_prompt",
+        message: "tester needs permission for Glob",
+      } },
+    ];
+    const result = buildAgentList(events, new Map());
+    const parent = result.find(a => a.sessionId === "parent");
+    // Parent should NOT be stuck in "waiting" due to worker_permission_prompt
+    assert.notEqual(parent?.status, "waiting");
+  });
+
+  it("does not affect agents when no teams are provided", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: nowIso, cwd: "/p" },
+    ];
+    const result = buildAgentList(events, new Map());
+    assert.equal(result[0].status, "active");
   });
 
   it("sorts agents by status order then lastActivity", () => {
