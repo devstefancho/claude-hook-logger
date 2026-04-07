@@ -2,9 +2,10 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const isWindows = process.platform === 'win32';
-const PROJECT_ROOT = new URL('../../', import.meta.url).pathname.replace(/\/$/, '');
+const PROJECT_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 export type LogLine = Record<string, unknown> & { data: Record<string, unknown> };
 

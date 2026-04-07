@@ -393,7 +393,7 @@ function mangleCwd(cwd: string): string {
 
 export function getRecentPrompts(sessionId: string, cwd: string, count = 3): string[] {
   /* c8 ignore next -- branch: HOME always set in test env */
-  const projectsDir = path.join(os.homedir(), ".claude", "projects");
+  const projectsDir = path.join(process.env.HOME || os.homedir(), ".claude", "projects");
   const mangledCwd = mangleCwd(cwd);
   const sessionFile = path.join(projectsDir, mangledCwd, `${sessionId}.jsonl`);
   if (!fs.existsSync(sessionFile)) return [];
@@ -423,7 +423,7 @@ export function getRecentPrompts(sessionId: string, cwd: string, count = 3): str
 }
 
 export function extractProjectName(cwd: string): string {
-  const home = os.homedir();
+  const home = process.env.HOME || os.homedir();
   if (home && (cwd === home || cwd.startsWith(home + "/") || cwd.startsWith(home + "\\"))) {
     return "~" + cwd.slice(home.length);
   }
