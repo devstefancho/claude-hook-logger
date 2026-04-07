@@ -620,6 +620,46 @@ describe("buildAgentList", () => {
     assert.equal(result[1].status, "idle");
     assert.equal(result[2].status, "ended");
   });
+
+  it("includes ended team member session even without includeEnded", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "lead1", ts: nowIso, cwd: "/proj" },
+      { event: "SessionStart", session_id: "member1", ts: oldIso, cwd: "/proj" },
+      { event: "SessionEnd", session_id: "member1", ts: oldIso },
+    ];
+    const teams: TeamInfo[] = [{
+      name: "test-team", description: "", createdAt: 0, leadSessionId: "lead1",
+      members: [
+        { agentId: "lead@test-team", name: "lead", cwd: "/proj", joinedAt: 0, sessionId: "lead1" },
+        { agentId: "worker@test-team", name: "worker", cwd: "/proj", joinedAt: 0, sessionId: "member1" },
+      ],
+    }];
+    const result = buildAgentList(events, new Map(), { teams });
+    assert.equal(result.length, 2);
+    const member = result.find(a => a.sessionId === "member1");
+    assert.ok(member, "ended team member should be included");
+    assert.equal(member!.status, "ended");
+  });
+
+  it("still filters ended non-team sessions", () => {
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "lead1", ts: nowIso, cwd: "/proj" },
+      { event: "SessionStart", session_id: "member1", ts: oldIso, cwd: "/proj" },
+      { event: "SessionEnd", session_id: "member1", ts: oldIso },
+      { event: "SessionStart", session_id: "random1", ts: oldIso, cwd: "/other" },
+      { event: "SessionEnd", session_id: "random1", ts: oldIso },
+    ];
+    const teams: TeamInfo[] = [{
+      name: "test-team", description: "", createdAt: 0, leadSessionId: "lead1",
+      members: [
+        { agentId: "lead@test-team", name: "lead", cwd: "/proj", joinedAt: 0, sessionId: "lead1" },
+        { agentId: "worker@test-team", name: "worker", cwd: "/proj", joinedAt: 0, sessionId: "member1" },
+      ],
+    }];
+    const result = buildAgentList(events, new Map(), { teams });
+    assert.ok(!result.find(a => a.sessionId === "random1"), "non-team ended session should be filtered");
+    assert.ok(result.find(a => a.sessionId === "member1"), "team member ended session should be included");
+  });
 });
 
 // ---------------------------------------------------------------------------
