@@ -10,8 +10,7 @@ const MERGE_SCRIPT = path.join(PROJECT_ROOT, "lib", "settings-merge-cli.ts");
 const HOOKS_CONFIG = path.join(PROJECT_ROOT, "hooks-config.json");
 
 // tsx binary resolution fails on Windows with pnpm (symlink issue)
-const describeOrSkip = process.platform === "win32" ? describe.skip : describe;
-describeOrSkip("integration: settings-merge CLI", () => {
+describe("integration: settings-merge CLI", { skip: process.platform === "win32" ? "tsx symlinks broken on Windows with pnpm" : false }, () => {
   let tmpDir: string;
   let settingsPath: string;
 
