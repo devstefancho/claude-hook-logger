@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname!, "..");
-const TSX_BIN = path.join(PROJECT_ROOT, "node_modules", ".bin", "tsx");
 const MERGE_SCRIPT = path.join(PROJECT_ROOT, "lib", "settings-merge-cli.ts");
 const HOOKS_CONFIG = path.join(PROJECT_ROOT, "hooks-config.json");
 
-describe("integration: settings-merge CLI", () => {
+// tsx binary resolution fails on Windows with pnpm (symlink issue)
+describe("integration: settings-merge CLI", { skip: process.platform === "win32" ? "tsx symlinks broken on Windows with pnpm" : false }, () => {
   let tmpDir: string;
   let settingsPath: string;
 
@@ -24,17 +24,21 @@ describe("integration: settings-merge CLI", () => {
   });
 
   function runInstall(): string {
-    return execSync(
-      `"${TSX_BIN}" ${MERGE_SCRIPT} install --config ${HOOKS_CONFIG} --settings ${settingsPath}`,
-      { encoding: "utf-8", cwd: PROJECT_ROOT },
-    );
+    return execFileSync(process.execPath, [
+      "--import", "tsx/esm",
+      MERGE_SCRIPT, "install",
+      "--config", HOOKS_CONFIG,
+      "--settings", settingsPath,
+    ], { encoding: "utf-8", cwd: PROJECT_ROOT });
   }
 
   function runUninstall(): string {
-    return execSync(
-      `"${TSX_BIN}" ${MERGE_SCRIPT} uninstall --settings ${settingsPath} --pattern "event-logger\\.sh"`,
-      { encoding: "utf-8", cwd: PROJECT_ROOT },
-    );
+    return execFileSync(process.execPath, [
+      "--import", "tsx/esm",
+      MERGE_SCRIPT, "uninstall",
+      "--settings", settingsPath,
+      "--pattern", "event-logger\\.sh",
+    ], { encoding: "utf-8", cwd: PROJECT_ROOT });
   }
 
   function readSettings(): Record<string, unknown> {

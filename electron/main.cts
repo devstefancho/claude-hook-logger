@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from "electron";
+import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 
@@ -8,7 +9,7 @@ let mainWindow: BrowserWindow | null = null;
 let server: http.Server | null = null;
 
 async function startServer(): Promise<void> {
-  const logDir = path.join(process.env.HOME || "", ".claude", "hook-logger");
+  const logDir = path.join(os.homedir(), ".claude", "hook-logger");
 
   let htmlPath: string;
   let webDir: string;
