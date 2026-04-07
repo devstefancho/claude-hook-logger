@@ -492,6 +492,16 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
     }
   }
 
+  // Collect team member session IDs to preserve them even if ended
+  const teamSessionIds = new Set<string>();
+  if (teams) {
+    for (const team of teams) {
+      for (const member of team.members) {
+        if (member.sessionId) teamSessionIds.add(member.sessionId);
+      }
+    }
+  }
+
   const agents: AgentInfo[] = [];
 
   for (const sess of summary.sessions) {
@@ -518,8 +528,8 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
       }
     }
 
-    // Skip ended sessions unless explicitly requested
-    if (status === "ended" && !includeEnded) continue;
+    // Skip ended sessions unless explicitly requested or part of a team
+    if (status === "ended" && !includeEnded && !teamSessionIds.has(sess.id)) continue;
 
     const lastToolEvent = lastToolBySession.get(sess.id);
     const cwd = claudeSession?.cwd || sess.cwd;
