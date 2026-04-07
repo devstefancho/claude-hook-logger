@@ -22,6 +22,7 @@ export {
   getCachedSummary,
   setCachedSummary,
   getTeams,
+  enrichTeamSessions,
 } from "./data.js";
 export type { LogEvent, SessionInfo, ToolUsageEntry, Summary, AgentInfo, ClaudeSession, TeamInfo, TeamMember } from "./data.js";
 
@@ -36,6 +37,7 @@ import {
   getCachedSummary,
   setCachedSummary,
   getTeams,
+  enrichTeamSessions,
 } from "./data.js";
 import { createHookLoggerMcpServer } from "./mcp-tools.js";
 
@@ -246,31 +248,8 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
       // Enrich: resolve unmatched members using hook event sessions
       const events = parseLogFile(logDir, "hook-events.jsonl");
       const summary = buildSummary(events);
-      for (const team of teams) {
-        const assignedSids = new Set(team.members.filter(m => m.sessionId).map(m => m.sessionId!));
-        const unresolvedMembers = team.members
-          .filter(m => !m.sessionId && m.joinedAt)
-          .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-
-        /* c8 ignore start -- V8 async handler coverage gap; tested in teams.test.ts enrichment */
-        if (unresolvedMembers.length === 0) continue;
-
-        // Find candidate sessions: same cwd, not already assigned, not ended
-        const candidateSessions = summary.sessions
-          .filter(s => !assignedSids.has(s.id) && s.cwd && unresolvedMembers.some(m => m.cwd === s.cwd))
-          .sort((a, b) => new Date(a.firstTs).getTime() - new Date(b.firstTs).getTime());
-
-        for (const member of unresolvedMembers) {
-          const match = candidateSessions.find(
-            s => s.cwd === member.cwd && !assignedSids.has(s.id)
-              && Math.abs(new Date(s.firstTs).getTime() - member.joinedAt!) < 60000
-          );
-          if (match) {
-            member.sessionId = match.id;
-            assignedSids.add(match.id);
-          }
-        }
-      }
+      /* c8 ignore next -- V8 async handler coverage gap; tested in teams.test.ts enrichment */
+      enrichTeamSessions(teams, summary);
 
       return sendJson(res, { teams });
     }
@@ -284,7 +263,12 @@ export function createServer(logDir: string, htmlPath: string, webDir?: string, 
       const sessionsDir = path.join(process.env.HOME || "", ".claude", "sessions");
       /* c8 ignore stop */
       const claudeSessions = getClaudeSessions(sessionsDir);
-      const agents = buildAgentList(events, claudeSessions, { includeEnded, thresholdMs });
+      /* c8 ignore next -- branch: HOME always set */
+      const teamsDir = path.join(process.env.HOME || "", ".claude", "teams");
+      /* c8 ignore stop */
+      const teams = getTeams(teamsDir, sessionsDir);
+      enrichTeamSessions(teams, buildSummary(events));
+      const agents = buildAgentList(events, claudeSessions, { includeEnded, thresholdMs, teams });
       for (const agent of agents) {
         agent.summary = getCachedSummary(agent.sessionId);
       }

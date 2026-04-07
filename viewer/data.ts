@@ -429,8 +429,8 @@ export function extractProjectName(cwd: string): string {
 }
 
 /* c8 ignore next -- V8 doesn't cover function signature with default params */
-export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, ClaudeSession>, options: { includeEnded?: boolean; thresholdMs?: number } = {}): AgentInfo[] {
-  const { includeEnded = false, thresholdMs = 5 * 60 * 1000 } = options;
+export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, ClaudeSession>, options: { includeEnded?: boolean; thresholdMs?: number; teams?: TeamInfo[] } = {}): AgentInfo[] {
+  const { includeEnded = false, thresholdMs = 5 * 60 * 1000, teams = [] } = options;
   const summary = buildSummary(events);
   const now = Date.now();
 
@@ -441,6 +441,11 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
   const lastStopBySession = new Map<string, LogEvent>();
   const lastPermissionBySession = new Map<string, LogEvent>();
   const lastUserPromptBySession = new Map<string, LogEvent>();
+  // key: "{parentSessionId}:{workerName}", value: last worker_permission_prompt Notification
+  const workerPermByKey = new Map<string, LogEvent>();
+  // Track dangling PreToolUse per session (PreToolUse without matching PostToolUse)
+  // key: sessionId, value: Map<tool_use_id, LogEvent>
+  const pendingPreToolBySession = new Map<string, Map<string, LogEvent>>();
   for (const ev of events) {
     /* c8 ignore next -- branch: session_id always present in test data */
     const sid = ev.session_id || "unknown";
@@ -456,10 +461,19 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
     if ((ev.event === "PreToolUse" || ev.event === "PostToolUse") && ev.data?.tool_name) {
       lastToolBySession.set(sid, ev);
     }
+    // Track dangling PreToolUse: add on PreToolUse, remove on PostToolUse/PostToolUseFailure
+    if (ev.event === "PreToolUse" && ev.data?.tool_use_id) {
+      if (!pendingPreToolBySession.has(sid)) pendingPreToolBySession.set(sid, new Map());
+      pendingPreToolBySession.get(sid)!.set(String(ev.data.tool_use_id), ev);
+    }
+    if ((ev.event === "PostToolUse" || ev.event === "PostToolUseFailure") && ev.data?.tool_use_id) {
+      pendingPreToolBySession.get(sid)?.delete(String(ev.data.tool_use_id));
+    }
     if (ev.event === "Stop") {
       lastStopBySession.set(sid, ev);
     }
     if (ev.event === "Notification" && ev.data?.message &&
+        ev.data?.notification_type !== "worker_permission_prompt" &&
         (String(ev.data.message).includes("permission") || String(ev.data.message).includes("approval"))) {
       lastPermissionBySession.set(sid, ev);
     }
@@ -468,6 +482,13 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
     }
     if (ev.event === "UserPromptSubmit" && ev.data?.prompt) {
       lastUserPromptBySession.set(sid, ev);
+    }
+    // Track worker_permission_prompt from parent sessions for team member mapping
+    if (ev.event === "Notification" && ev.data?.notification_type === "worker_permission_prompt") {
+      const match = String(ev.data.message || "").match(/^(.+?) needs permission for (.+)$/);
+      if (match) {
+        workerPermByKey.set(`${sid}:${match[1]}`, ev);
+      }
     }
   }
 
@@ -549,6 +570,74 @@ export function buildAgentList(events: LogEvent[], claudeSessions: Map<string, C
       permissionMessage,
       latestUserPrompt,
     });
+  }
+
+  // Propagate worker_permission_prompt from parent session to team member agents
+  // Worker names in notifications may differ from team member names (e.g., "tester" vs "tester2"),
+  // so we match by checking if either name starts with the other.
+  if (teams.length > 0) {
+    for (const agent of agents) {
+      if (agent.status === "ended") continue;
+      for (const team of teams) {
+        const member = team.members.find(m => m.sessionId === agent.sessionId);
+        if (!member) continue;
+        // Try exact match first, then prefix match
+        const prefix = `${team.leadSessionId}:`;
+        let workerPerm: LogEvent | undefined;
+        workerPerm = workerPermByKey.get(`${prefix}${member.name}`);
+        if (!workerPerm) {
+          // Prefix match: notification worker name startsWith member name or vice versa
+          for (const [key, ev] of workerPermByKey) {
+            if (!key.startsWith(prefix)) continue;
+            const notifWorkerName = key.slice(prefix.length);
+            if (member.name.startsWith(notifWorkerName) || notifWorkerName.startsWith(member.name)) {
+              workerPerm = ev;
+              break;
+            }
+          }
+        }
+        if (!workerPerm) continue;
+        const lastResolve = lastPermResolveBySession.get(agent.sessionId);
+        const resolved = lastResolve && new Date(lastResolve.ts).getTime() > new Date(workerPerm.ts).getTime();
+        if (!resolved) {
+          agent.status = "waiting";
+          if (!agent.permissionMessage) {
+            agent.permissionMessage = String(workerPerm.data?.message || "Waiting for permission");
+          }
+        }
+      }
+    }
+
+    // Fallback: detect dangling PreToolUse for idle team members (not lead)
+    // Team member sessions may not receive PermissionRequest/Notification events,
+    // so a PreToolUse without matching PostToolUse indicates permission waiting.
+    // Only apply to "idle" agents — "active" agents have a dangling PreToolUse
+    // because a tool is currently executing, not because it's waiting for permission.
+    for (const agent of agents) {
+      if (agent.status !== "idle") continue;
+      const pending = pendingPreToolBySession.get(agent.sessionId);
+      if (!pending || pending.size === 0) continue;
+      // Only apply to team members (not lead)
+      let isTeamMember = false;
+      for (const team of teams) {
+        if (team.members.some(m => m.sessionId === agent.sessionId) && team.leadSessionId !== agent.sessionId) {
+          isTeamMember = true;
+          break;
+        }
+      }
+      if (!isTeamMember) continue;
+      // Use the most recent dangling PreToolUse
+      let latest: LogEvent | undefined;
+      for (const ev of pending.values()) {
+        if (!latest || ev.ts > latest.ts) latest = ev;
+      }
+      if (latest) {
+        agent.status = "waiting";
+        if (!agent.permissionMessage) {
+          agent.permissionMessage = `Waiting for permission: ${latest.data?.tool_name || "tool"}`;
+        }
+      }
+    }
   }
 
   // Sort: active > waiting > idle > ended, then by lastActivity desc
@@ -741,6 +830,33 @@ export function getTeams(teamsDir: string, sessionsDir?: string): TeamInfo[] {
     }
   }
   return teams;
+}
+
+/** Enrich team members with sessionId by matching hook event sessions (temporal + cwd) */
+export function enrichTeamSessions(teams: TeamInfo[], summary: Summary): void {
+  for (const team of teams) {
+    const assignedSids = new Set(team.members.filter(m => m.sessionId).map(m => m.sessionId!));
+    const unresolvedMembers = team.members
+      .filter(m => !m.sessionId && m.joinedAt)
+      .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+
+    if (unresolvedMembers.length === 0) continue;
+
+    const candidateSessions = summary.sessions
+      .filter(s => !assignedSids.has(s.id) && s.cwd && unresolvedMembers.some(m => m.cwd === s.cwd))
+      .sort((a, b) => new Date(a.firstTs).getTime() - new Date(b.firstTs).getTime());
+
+    for (const member of unresolvedMembers) {
+      const match = candidateSessions.find(
+        s => s.cwd === member.cwd && !assignedSids.has(s.id)
+          && Math.abs(new Date(s.firstTs).getTime() - (member.joinedAt || 0)) < 60000
+      );
+      if (match) {
+        member.sessionId = match.id;
+        assignedSids.add(match.id);
+      }
+    }
+  }
 }
 
 // Summary cache for agent summaries
