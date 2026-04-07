@@ -24,14 +24,14 @@ describe("integration: settings-merge CLI", () => {
 
   function runInstall(): string {
     return execSync(
-      `node --import tsx/esm "${MERGE_SCRIPT}" install --config "${HOOKS_CONFIG}" --settings "${settingsPath}"`,
+      `npx tsx "${MERGE_SCRIPT}" install --config "${HOOKS_CONFIG}" --settings "${settingsPath}"`,
       { encoding: "utf-8", cwd: PROJECT_ROOT },
     );
   }
 
   function runUninstall(): string {
     return execSync(
-      `node --import tsx/esm "${MERGE_SCRIPT}" uninstall --settings "${settingsPath}" --pattern "event-logger\\.sh"`,
+      `npx tsx "${MERGE_SCRIPT}" uninstall --settings "${settingsPath}" --pattern "event-logger\\.sh"`,
       { encoding: "utf-8", cwd: PROJECT_ROOT },
     );
   }
