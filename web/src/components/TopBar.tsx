@@ -1,5 +1,15 @@
 import type { LayoutMode, SidebarView, VariantType } from "../App";
 
+function PulseLogo() {
+  return (
+    <img
+      className="topbar-logo"
+      src="/logo.png"
+      alt="Claude Pulse"
+    />
+  );
+}
+
 interface TopBarProps {
   files: string[];
   currentFile: string;
@@ -74,7 +84,8 @@ export function TopBar({
         >
           <span className="layout-icon">{LAYOUT_ICONS[layoutMode]}</span>
         </button>
-        <span className="topbar-title">HOOK LOGGER</span>
+        <PulseLogo />
+        <span className="topbar-title">CLAUDE PULSE</span>
         {layoutMode === "focus" && (
           <div className="topbar-nav">
             {NAV_ITEMS.map(({ key, label }) => (
