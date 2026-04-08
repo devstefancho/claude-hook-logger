@@ -298,13 +298,16 @@ function AgentMiniCard({
 }) {
   const color = STATUS_COLORS[agent.status];
 
+  const hasPermission = !!agent.permissionMessage;
+  const dotColor = hasPermission ? STATUS_COLORS.waiting : color;
+
   return (
     <div
-      className="agent-mini-card"
+      className={`agent-mini-card${hasPermission ? ' mini-card-permission' : ''}`}
       style={{ "--status-color": color } as React.CSSProperties}
       onClick={onClick}
     >
-      <span className="agent-dot-v2" style={{ backgroundColor: color, width: 8, height: 8, flexShrink: 0 }} />
+      <span className="agent-dot-v2" style={{ backgroundColor: dotColor, width: 8, height: 8, flexShrink: 0 }} />
       <span className={`agent-name-v2${agent.name ? '' : ' agent-name-unnamed'}`}
             style={{ fontSize: 11, flexShrink: 0 }}
             title={agent.name ? undefined : 'Use /rename to set a name'}>
@@ -316,6 +319,9 @@ function AgentMiniCard({
       <span className="agent-badge-v2" style={{ backgroundColor: color, fontSize: 9, padding: "1px 6px" }}>
         {STATUS_LABELS[agent.status]}
       </span>
+      {hasPermission && (
+        <span className="agent-mini-permission" title={agent.permissionMessage || undefined}>⚠</span>
+      )}
       <span className="agent-mini-expand">{isExpanded ? "▾" : "▸"}</span>
     </div>
   );
@@ -339,7 +345,7 @@ function TeamOverviewCard({
     return t > latest ? t : latest;
   }, 0);
 
-  const hasWaiting = group.agents.some((a) => a.status === "waiting");
+  const hasWaiting = group.agents.some((a) => a.status === "waiting" || (a.status === "ended" && !!a.permissionMessage));
 
   return (
     <div className={`team-dashboard-card${hasWaiting ? ' permission-waiting' : ''}`} onClick={onClick}>
@@ -733,7 +739,7 @@ export function AgentsView({
 
   // === Case 4: Dashboard Overview ===
   const renderAgentByStatus = (agent: AgentInfo, team?: TeamInfo) => {
-    if (agent.status === "idle" || agent.status === "ended") {
+    if (agent.status === "idle" || (agent.status === "ended" && !agent.permissionMessage)) {
       const isExpanded = expandedIdleAgents.has(agent.sessionId);
       return (
         <div key={agent.sessionId} className="agent-accordion">

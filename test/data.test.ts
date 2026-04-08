@@ -386,6 +386,19 @@ describe("buildAgentList", () => {
     assert.equal(result[0].permissionMessage, null);
   });
 
+  it("keeps ended status but preserves permissionMessage when session ends with unresolved permission", () => {
+    const t1 = "2026-01-01T00:00:01Z";
+    const t2 = "2026-01-01T00:00:02Z";
+    const events: LogEvent[] = [
+      { event: "SessionStart", session_id: "s1", ts: t1, cwd: "/p" },
+      { event: "Notification", session_id: "s1", ts: t1, data: { message: "Claude Code needs your approval for the plan" } },
+      { event: "SessionEnd", session_id: "s1", ts: t2, data: {} },
+    ];
+    const result = buildAgentList(events, new Map(), { includeEnded: true });
+    assert.equal(result[0].status, "ended");
+    assert.equal(result[0].permissionMessage, "Claude Code needs your approval for the plan");
+  });
+
   it("sets justCompleted true when Stop without stop_hook_active is recent", () => {
     const events: LogEvent[] = [
       { event: "SessionStart", session_id: "s1", ts: nowIso, cwd: "/p" },
