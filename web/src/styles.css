@@ -1370,6 +1370,18 @@ body {
   border-color: var(--border-hover);
   border-left-color: var(--status-color, var(--border-hover));
 }
+.mini-card-permission {
+  border-left-color: #f0883e;
+  background: rgba(240, 136, 62, 0.05);
+}
+.mini-card-permission:hover {
+  border-left-color: #f0883e;
+}
+.agent-mini-permission {
+  color: #f0883e;
+  font-size: 12px;
+  flex-shrink: 0;
+}
 .agent-mini-project {
   font-size: 11px;
   color: var(--text-secondary);
