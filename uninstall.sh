@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Hook Logger - Uninstaller
+# Claude Pulse - Uninstaller
 # Removes hook scripts and cleans settings.json safely.
 set -euo pipefail
 
@@ -15,7 +15,7 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo "=== Claude Hook Logger - Uninstall ==="
+echo "=== Claude Pulse - Uninstall ==="
 echo ""
 
 # Check node is available (needed for settings-merge)
@@ -60,7 +60,7 @@ if [[ -d "$VIEWER_DIR" ]]; then
 fi
 
 echo ""
-echo -e "${YELLOW}Note: ~/.claude/hook-logger/ preserved (your log data)${NC}"
+echo -e "${YELLOW}Note: ~/.claude/claude-pulse/ preserved (your log data)${NC}"
 echo -e "${YELLOW}Note: If you added the 'hooklog' alias, remove it manually from your shell config.${NC}"
 echo ""
 echo -e "${GREEN}=== Uninstall complete ===${NC}"

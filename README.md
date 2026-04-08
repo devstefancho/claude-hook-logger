@@ -1,4 +1,4 @@
-# Claude Hook Logger
+# Claude Pulse
 
 Claude Code의 모든 hook 이벤트를 자동으로 기록하고, 웹 대시보드에서 시각적으로 분석할 수 있는 시스템입니다.
 
@@ -25,8 +25,8 @@ Claude Code의 모든 hook 이벤트를 자동으로 기록하고, 웹 대시보
 ## Quick Start
 
 ```bash
-git clone https://github.com/devstefancho/claude-hook-logger.git
-cd claude-hook-logger
+git clone https://github.com/devstefancho/claude-pulse.git
+cd claude-pulse
 pnpm install
 ./install.sh
 ```
@@ -37,7 +37,7 @@ pnpm install
 2. TypeScript 빌드 (`pnpm run build`)
 3. hook 스크립트를 `~/.claude/hooks/`에 복사
 4. `hooks-config.json`을 `~/.claude/settings.json`에 병합
-5. 로그 디렉토리 `~/.claude/hook-logger/` 생성
+5. 로그 디렉토리 `~/.claude/claude-pulse/` 생성
 
 ## Usage
 
@@ -127,7 +127,7 @@ pnpm install
 
 ## Log Format
 
-로그는 JSONL (한 줄에 하나의 JSON 객체) 형식으로 `~/.claude/hook-logger/hook-events.jsonl`에 저장됩니다.
+로그는 JSONL (한 줄에 하나의 JSON 객체) 형식으로 `~/.claude/claude-pulse/hook-events.jsonl`에 저장됩니다.
 
 ```json
 {
@@ -169,7 +169,7 @@ Claude Code Session
 event-logger.sh (stdin으로 JSON 수신)
   │ (이벤트별 데이터 추출)
   ▼
-~/.claude/hook-logger/hook-events.jsonl (JSONL append)
+~/.claude/claude-pulse/hook-events.jsonl (JSONL append)
   │
   ├──▶ Web Dashboard (localhost:7777)
   │     ├── REST API (/api/files, /api/events, /api/summary)
@@ -184,7 +184,7 @@ event-logger.sh (stdin으로 JSON 수신)
 ## Project Structure
 
 ```
-claude-hook-logger/
+claude-pulse/
 ├── hooks/                  # Hook 이벤트 로깅 셸 스크립트
 │   ├── event-logger.sh     #   이벤트 수신 및 JSONL 기록
 │   └── rotate-logs.sh      #   로그 로테이션
@@ -269,14 +269,37 @@ just install        # hook 설치
 just uninstall      # hook 제거
 ```
 
+## Migration from Hook Logger
+
+이전 버전(Claude Hook Logger)에서 업데이트하는 경우:
+
+```bash
+# 1. 기존 로그 데이터 마이그레이션
+mv ~/.claude/hook-logger ~/.claude/claude-pulse
+
+# 2. 기존 hook 설정 제거 후 재설치
+./uninstall.sh
+./install.sh
+```
+
+**변경 사항:**
+
+| 항목 | 이전 | 현재 |
+|---|---|---|
+| 로그 디렉토리 | `~/.claude/hook-logger/` | `~/.claude/claude-pulse/` |
+| MCP 서버명 | `hook-logger` | `claude-pulse` |
+| MCP 도구 접두사 | `mcp__hook-logger__*` | `mcp__claude-pulse__*` |
+
+> **Note:** 로그 디렉토리를 마이그레이션하지 않으면 기존 로그 데이터를 대시보드에서 볼 수 없습니다.
+
 ## Uninstall
 
 ```bash
-cd claude-hook-logger
+cd claude-pulse
 ./uninstall.sh
 ```
 
-> **Note:** 로그 파일은 `~/.claude/hook-logger/`에 보존됩니다. 필요 없다면 수동으로 삭제하세요.
+> **Note:** 로그 파일은 `~/.claude/claude-pulse/`에 보존됩니다. 필요 없다면 수동으로 삭제하세요.
 
 ## License
 

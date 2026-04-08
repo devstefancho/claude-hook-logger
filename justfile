@@ -1,4 +1,4 @@
-# Claude Hook Logger - Development Commands
+# Claude Pulse - Development Commands
 
 # 기본 레시피 (just만 입력 시 실행)
 default:

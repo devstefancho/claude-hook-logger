@@ -1,4 +1,4 @@
-# Claude Hook Logger
+# Claude Pulse
 
 Claude Code hook 이벤트를 JSONL 형식으로 기록하고, 웹 대시보드로 분석하는 시스템.
 
@@ -50,7 +50,7 @@ pnpm run test:coverage       # 커버리지 리포트
 ## 아키텍처
 
 ### 이벤트 흐름
-Claude Code 세션 -> Hook 이벤트 트리거 -> event-logger.sh (stdin으로 JSON 수신) -> JSONL 파일에 추가 (`~/.claude/hook-logger/hook-events.jsonl`)
+Claude Code 세션 -> Hook 이벤트 트리거 -> event-logger.sh (stdin으로 JSON 수신) -> JSONL 파일에 추가 (`~/.claude/claude-pulse/hook-events.jsonl`)
 
 ### 등록된 Hook 이벤트 (hooks-config.json)
 SessionStart, SessionEnd, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, Notification, Stop, SubagentStart, SubagentStop

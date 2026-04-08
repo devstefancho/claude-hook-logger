@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Hook Logger - Installer
+# Claude Pulse - Installer
 # Copies hook scripts and merges settings.json safely.
 set -euo pipefail
 
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 VIEWER_DIR="$HOOKS_DIR/log-viewer"
-LOGS_DIR="$CLAUDE_DIR/hook-logger"
+LOGS_DIR="$CLAUDE_DIR/claude-pulse"
 SETTINGS="$CLAUDE_DIR/settings.json"
 
 # Colors
@@ -16,7 +16,7 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo "=== Claude Hook Logger - Install ==="
+echo "=== Claude Pulse - Install ==="
 echo ""
 
 # Check dependencies

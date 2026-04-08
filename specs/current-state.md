@@ -5,7 +5,7 @@
 ### 레이아웃 구조
 
 ```
-[TopBar: 레이아웃토글 | HOOK LOGGER | 파일선택 | Refresh | Auto | Chat]
+[TopBar: 레이아웃토글 | CLAUDE PULSE | 파일선택 | Refresh | Auto | Chat]
 [Sidebar (220px)  |  DetailPanel (flex:1)                             ]
 [  - Agents       |  (activeView에 따라 전환)                           ]
 [  - Tools        |                                                    ]
@@ -25,7 +25,7 @@
 | 기능 | 상태 | 설명 |
 |---|---|---|
 | 레이아웃 토글 | ✅ | full(220px) → compact(52px) → focus(숨김) 순환 |
-| 타이틀 | ✅ | "HOOK LOGGER" 텍스트 |
+| 타이틀 | ✅ | "CLAUDE PULSE" 텍스트 + 로고 이미지 |
 | 파일 선택 | ✅ | JSONL 로그 파일 드롭다운 |
 | Refresh | ✅ | 수동 데이터 새로고침 |
 | Auto-refresh | ✅ | 5초 간격 폴링 토글 |

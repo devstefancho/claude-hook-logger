@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "./server.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_LOG_DIR = path.join(process.env.HOME || os.homedir(), ".claude", "hook-logger");
+const DEFAULT_LOG_DIR = path.join(process.env.HOME || os.homedir(), ".claude", "claude-pulse");
 const DEFAULT_PORT = 7777;
 
 const PORT = parseInt(process.argv[2] || String(DEFAULT_PORT), 10);

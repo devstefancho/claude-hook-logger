@@ -139,16 +139,16 @@ export function handleChat(
           abortController,
           maxTurns: 3,
           allowedTools: [
-            "mcp__hook-logger__get_dashboard_summary",
-            "mcp__hook-logger__list_sessions",
-            "mcp__hook-logger__get_session_detail",
-            "mcp__hook-logger__get_recent_activity",
-            "mcp__hook-logger__get_tool_skill_usage",
-            "mcp__hook-logger__search_events",
-            "mcp__hook-logger__list_agents",
-            "mcp__hook-logger__get_agent_detail",
+            "mcp__claude-pulse__get_dashboard_summary",
+            "mcp__claude-pulse__list_sessions",
+            "mcp__claude-pulse__get_session_detail",
+            "mcp__claude-pulse__get_recent_activity",
+            "mcp__claude-pulse__get_tool_skill_usage",
+            "mcp__claude-pulse__search_events",
+            "mcp__claude-pulse__list_agents",
+            "mcp__claude-pulse__get_agent_detail",
           ],
-          mcpServers: { "hook-logger": mcpServer },
+          mcpServers: { "claude-pulse": mcpServer },
           permissionMode: "acceptEdits",
           persistSession: false,
           env,
@@ -166,7 +166,7 @@ export function handleChat(
                 res.write(`data: ${JSON.stringify({ text: block.text })}\n\n`);
               } else if (block.type === "tool_use" && block.name) {
                 // Send tool usage info to client (strip mcp__ prefix for display)
-                const toolName = block.name.replace(/^mcp__hook-logger__/, "");
+                const toolName = block.name.replace(/^mcp__claude-pulse__/, "");
                 res.write(`data: ${JSON.stringify({ tool_use: toolName })}\n\n`);
               }
             }

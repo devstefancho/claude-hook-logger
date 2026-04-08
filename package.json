@@ -1,5 +1,5 @@
 {
-  "name": "claude-hook-logger",
+  "name": "claude-pulse",
   "version": "1.0.0",
   "description": "Event logging system + web dashboard for Claude Code hooks",
   "type": "module",
@@ -36,8 +36,8 @@
     "zod": "^4.3.6"
   },
   "build": {
-    "appId": "com.claude-hook-logger.app",
-    "productName": "Claude Hook Logger",
+    "appId": "com.claude-pulse.app",
+    "productName": "Claude Pulse",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [

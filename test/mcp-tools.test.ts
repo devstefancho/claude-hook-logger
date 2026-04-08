@@ -205,10 +205,10 @@ describe("createHookLoggerMcpServer", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("creates a server with type 'sdk' and name 'hook-logger'", () => {
+  it("creates a server with type 'sdk' and name 'claude-pulse'", () => {
     const server = createHookLoggerMcpServer(tmpDir);
     assert.equal(server.type, "sdk");
-    assert.equal(server.name, "hook-logger");
+    assert.equal(server.name, "claude-pulse");
     assert.ok(server.instance);
   });
 });
