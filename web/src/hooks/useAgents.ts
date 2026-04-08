@@ -43,7 +43,7 @@ export function useAgents() {
     try {
       setLoading(true);
       const [agentsRes, teamsRes] = await Promise.all([
-        fetch(`/api/agents?threshold=${threshold}`),
+        fetch(`/api/agents?threshold=${threshold}&includeEnded=true`),
         fetch("/api/teams"),
       ]);
       const agentsData = await agentsRes.json();
