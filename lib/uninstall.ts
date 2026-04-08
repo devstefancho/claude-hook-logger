@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Claude Hook Logger - Cross-platform Uninstaller
+// Claude Pulse - Cross-platform Uninstaller
 import { existsSync, rmSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -20,7 +20,7 @@ const YELLOW = "\x1b[0;33m";
 const RED = "\x1b[0;31m";
 const NC = "\x1b[0m";
 
-console.log("=== Claude Hook Logger - Uninstall ===\n");
+console.log("=== Claude Pulse - Uninstall ===\n");
 
 // Remove hooks from settings.json
 console.log("Cleaning settings.json...");
@@ -67,7 +67,7 @@ if (existsSync(VIEWER_DIR)) {
 }
 
 console.log("");
-console.log(`${YELLOW}Note: ~/.claude/hook-logger/ preserved (your log data)${NC}`);
+console.log(`${YELLOW}Note: ~/.claude/claude-pulse/ preserved (your log data)${NC}`);
 console.log(`${YELLOW}Note: If you added the 'hooklog' alias, remove it manually from your shell config.${NC}`);
 console.log("");
 console.log(`${GREEN}=== Uninstall complete ===${NC}`);

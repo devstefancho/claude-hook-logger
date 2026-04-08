@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Claude Hook Logger - Cross-platform Installer
+// Claude Pulse - Cross-platform Installer
 import { mkdirSync, copyFileSync, chmodSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
@@ -14,13 +14,13 @@ const HOME = homedir();
 const CLAUDE_DIR = join(HOME, ".claude");
 const HOOKS_DIR = join(CLAUDE_DIR, "hooks");
 const VIEWER_DIR = join(HOOKS_DIR, "log-viewer");
-const LOGS_DIR = join(CLAUDE_DIR, "hook-logger");
+const LOGS_DIR = join(CLAUDE_DIR, "claude-pulse");
 
 const GREEN = "\x1b[0;32m";
 const RED = "\x1b[0;31m";
 const NC = "\x1b[0m";
 
-console.log("=== Claude Hook Logger - Install ===\n");
+console.log("=== Claude Pulse - Install ===\n");
 
 // Check dependencies
 try {

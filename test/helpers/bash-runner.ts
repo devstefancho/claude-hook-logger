@@ -24,7 +24,7 @@ export interface RotateLogsResult {
 
 export function createTempHome(): string {
   const tempHome = mkdtempSync(join(tmpdir(), 'claude-hook-test-'));
-  const logsDir = join(tempHome, '.claude', 'hook-logger');
+  const logsDir = join(tempHome, '.claude', 'claude-pulse');
   const hooksDir = join(tempHome, '.claude', 'hooks');
   mkdirSync(logsDir, { recursive: true });
   mkdirSync(hooksDir, { recursive: true });
@@ -83,7 +83,7 @@ export function runEventLogger(tempHome: string, input: Record<string, unknown> 
     });
   }
 
-  const logFile = join(tempHome, '.claude', 'hook-logger', 'hook-events.jsonl');
+  const logFile = join(tempHome, '.claude', 'claude-pulse', 'hook-events.jsonl');
   const logLines: LogLine[] = [];
   if (existsSync(logFile)) {
     const content = readFileSync(logFile, 'utf-8').trim();
@@ -137,7 +137,7 @@ export function runRotateLogs(tempHome: string): RotateLogsResult {
 }
 
 export function readLogFile(tempHome: string): LogLine[] {
-  const logFile = join(tempHome, '.claude', 'hook-logger', 'hook-events.jsonl');
+  const logFile = join(tempHome, '.claude', 'claude-pulse', 'hook-events.jsonl');
   if (!existsSync(logFile)) return [];
   const content = readFileSync(logFile, 'utf-8').trim();
   if (!content) return [];
@@ -145,10 +145,10 @@ export function readLogFile(tempHome: string): LogLine[] {
 }
 
 export function writeLogFile(tempHome: string, content: string): void {
-  const logFile = join(tempHome, '.claude', 'hook-logger', 'hook-events.jsonl');
+  const logFile = join(tempHome, '.claude', 'claude-pulse', 'hook-events.jsonl');
   writeFileSync(logFile, content);
 }
 
 export function getLogDir(tempHome: string): string {
-  return join(tempHome, '.claude', 'hook-logger');
+  return join(tempHome, '.claude', 'claude-pulse');
 }

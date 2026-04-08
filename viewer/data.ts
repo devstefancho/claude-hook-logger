@@ -891,7 +891,7 @@ export function setCachedSummary(sessionId: string, text: string): void {
 
 export function buildMinimalContext(summary: Summary): string {
   return `You are an assistant that analyzes Claude Code hook event data.
-You have MCP tools (hook-logger) to query data. Use them for detailed answers.
+You have MCP tools (claude-pulse) to query data. Use them for detailed answers.
 
 Quick stats: ${summary.totalEvents} events, ${summary.sessionCount} sessions (${summary.liveSessionCount} live, ${summary.staleSessionCount} stale), ${summary.toolCount} tools, ${summary.interruptCount} interrupts
 

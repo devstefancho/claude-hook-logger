@@ -9,7 +9,7 @@ let mainWindow: BrowserWindow | null = null;
 let server: http.Server | null = null;
 
 async function startServer(): Promise<void> {
-  const logDir = path.join(os.homedir(), ".claude", "hook-logger");
+  const logDir = path.join(os.homedir(), ".claude", "claude-pulse");
 
   let htmlPath: string;
   let webDir: string;

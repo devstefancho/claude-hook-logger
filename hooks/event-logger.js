@@ -10,7 +10,7 @@ import { execSync, fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const HOME = process.env.HOME || homedir();
-const LOG_DIR = join(HOME, ".claude", "hook-logger");
+const LOG_DIR = join(HOME, ".claude", "claude-pulse");
 const LOG_FILE = join(LOG_DIR, "hook-events.jsonl");
 
 mkdirSync(LOG_DIR, { recursive: true });

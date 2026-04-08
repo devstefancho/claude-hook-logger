@@ -221,7 +221,7 @@ function mcpContent(data: unknown) {
 
 export function createHookLoggerMcpServer(logDir: string) {
   return createSdkMcpServer({
-    name: "hook-logger",
+    name: "claude-pulse",
     version: "1.0.0",
     tools: [
       tool(

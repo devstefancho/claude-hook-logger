@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 
 const HOME = process.env.HOME || homedir();
-const LOG_DIR = join(HOME, ".claude", "hook-logger");
+const LOG_DIR = join(HOME, ".claude", "claude-pulse");
 const LOG_FILE = join(LOG_DIR, "hook-events.jsonl");
 
 // Nothing to rotate if log file doesn't exist or is empty

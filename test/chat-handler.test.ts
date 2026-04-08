@@ -104,7 +104,7 @@ describe("handleChat – streaming response", () => {
         type: "assistant",
         message: {
           content: [
-            { type: "tool_use", name: "mcp__hook-logger__get_dashboard_summary", input: {} },
+            { type: "tool_use", name: "mcp__claude-pulse__get_dashboard_summary", input: {} },
             { type: "text", text: "Summary result" },
           ],
         },

@@ -2,7 +2,7 @@
 # Log rotation for Claude Code hook events
 # Called on SessionStart. Rotates log if date has changed.
 
-LOG_DIR="$HOME/.claude/hook-logger"
+LOG_DIR="$HOME/.claude/claude-pulse"
 LOG_FILE="$LOG_DIR/hook-events.jsonl"
 
 # Nothing to rotate if log file doesn't exist or is empty
