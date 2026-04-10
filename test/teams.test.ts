@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getTeams } from "../viewer/data.js";
+import { getTeams, enrichTeamSessions, buildSummary } from "../viewer/data.js";
+import type { TeamInfo, LogEvent } from "../viewer/data.js";
 import {
   startServer,
   stopServer,
@@ -322,6 +323,176 @@ describe("getTeams", () => {
     // Planner (joinedAt1) should match session-1 (mtime closest to joinedAt1)
     assert.equal(planner.sessionId, "session-1");
     assert.equal(impl.sessionId, "session-2");
+  });
+
+  it("temporal matching rejects sessions with mtime far from joinedAt", () => {
+    const teamsDir = path.join(tmpDir, "teams");
+    const sessionsDir = path.join(tmpDir, "sessions");
+    const teamDir = path.join(teamsDir, "my-team");
+    fs.mkdirSync(teamDir, { recursive: true });
+    fs.mkdirSync(sessionsDir, { recursive: true });
+
+    const joinedAt = Date.now();
+
+    // Create session file with mtime 10 minutes before joinedAt (exceeds 5-min window)
+    const sessionFile = path.join(sessionsDir, "7777.json");
+    fs.writeFileSync(
+      sessionFile,
+      JSON.stringify({ pid: 7777, sessionId: "stale-session", cwd: "/proj" }),
+    );
+    const staleMtime = new Date(joinedAt - 10 * 60 * 1000);
+    fs.utimesSync(sessionFile, staleMtime, staleMtime);
+
+    fs.writeFileSync(
+      path.join(teamDir, "config.json"),
+      JSON.stringify({
+        name: "my-team",
+        leadAgentId: "lead@my-team",
+        leadSessionId: "lead-session",
+        members: [
+          { agentId: "lead@my-team", name: "team-lead", cwd: "/proj" },
+          { agentId: "impl@my-team", name: "implementer", cwd: "/proj", joinedAt },
+        ],
+      }),
+    );
+
+    const teams = getTeams(teamsDir, sessionsDir);
+    // Stale session should NOT be matched due to time window guard
+    assert.equal(teams[0].members[1].sessionId, undefined);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// enrichTeamSessions tests
+// ---------------------------------------------------------------------------
+describe("enrichTeamSessions", () => {
+  let tmpDir: string;
+  let originalHome: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "enrich-test-"));
+    originalHome = process.env.HOME;
+    process.env.HOME = tmpDir;
+  });
+
+  afterEach(() => {
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resolves member sessionId from project JSONL files via teamName/agentName", () => {
+    // Set up project JSONL file with teamName/agentName
+    const projDir = path.join(tmpDir, ".claude", "projects", "-proj");
+    fs.mkdirSync(projDir, { recursive: true });
+    const sessionId = "new-session-abc";
+    fs.writeFileSync(
+      path.join(projDir, `${sessionId}.jsonl`),
+      [
+        JSON.stringify({ type: "permission-mode" }),
+        JSON.stringify({ type: "user", teamName: "my-team", agentName: "implementer", message: { content: "hello" } }),
+      ].join("\n"),
+    );
+
+    const teams: TeamInfo[] = [{
+      name: "my-team",
+      description: "Test",
+      createdAt: 1000,
+      leadSessionId: "lead-session",
+      members: [
+        { agentId: "lead@my-team", name: "team-lead", sessionId: "lead-session", cwd: "/proj" },
+        { agentId: "implementer@my-team", name: "implementer", cwd: "/proj", joinedAt: 1000 },
+      ],
+    }];
+
+    const summary = buildSummary([]);
+    enrichTeamSessions(teams, summary);
+
+    assert.equal(teams[0].members[1].sessionId, sessionId);
+  });
+
+  it("overrides stale sessionId with correct match from project JSONL", () => {
+    const projDir = path.join(tmpDir, ".claude", "projects", "-proj");
+    fs.mkdirSync(projDir, { recursive: true });
+
+    const correctSessionId = "correct-session-123";
+    fs.writeFileSync(
+      path.join(projDir, `${correctSessionId}.jsonl`),
+      JSON.stringify({ type: "user", teamName: "my-team", agentName: "planner" }),
+    );
+
+    // Also create a stale JSONL file (older)
+    const staleFile = path.join(projDir, "stale-session-456.jsonl");
+    fs.writeFileSync(staleFile, JSON.stringify({ type: "user" }));
+    const oldTime = new Date(Date.now() - 3600000);
+    fs.utimesSync(staleFile, oldTime, oldTime);
+
+    const teams: TeamInfo[] = [{
+      name: "my-team",
+      description: "Test",
+      createdAt: 1000,
+      leadSessionId: "lead-session",
+      members: [
+        { agentId: "lead@my-team", name: "team-lead", sessionId: "lead-session", cwd: "/proj" },
+        { agentId: "planner@my-team", name: "planner", cwd: "/proj", joinedAt: 1000, sessionId: "stale-session-456" },
+      ],
+    }];
+
+    const summary = buildSummary([]);
+    enrichTeamSessions(teams, summary);
+
+    assert.equal(teams[0].members[1].sessionId, correctSessionId);
+  });
+
+  it("falls back to temporal matching when project JSONL not available", () => {
+    // No project JSONL files, but summary has matching sessions
+    const teams: TeamInfo[] = [{
+      name: "my-team",
+      description: "Test",
+      createdAt: 1000,
+      leadSessionId: "lead-session",
+      members: [
+        { agentId: "lead@my-team", name: "team-lead", sessionId: "lead-session", cwd: "/proj" },
+        { agentId: "impl@my-team", name: "implementer", cwd: "/proj", joinedAt: 1000 },
+      ],
+    }];
+
+    const events: LogEvent[] = [
+      { ts: new Date(1500).toISOString(), event: "SessionStart", session_id: "temporal-match", cwd: "/proj" },
+    ];
+    const summary = buildSummary(events);
+    enrichTeamSessions(teams, summary);
+
+    assert.equal(teams[0].members[1].sessionId, "temporal-match");
+  });
+
+  it("skips lead member during project JSONL matching", () => {
+    const projDir = path.join(tmpDir, ".claude", "projects", "-proj");
+    fs.mkdirSync(projDir, { recursive: true });
+    // Create JSONL that could match lead but shouldn't override
+    fs.writeFileSync(
+      path.join(projDir, "different-session.jsonl"),
+      JSON.stringify({ type: "user", teamName: "my-team", agentName: "team-lead" }),
+    );
+
+    const teams: TeamInfo[] = [{
+      name: "my-team",
+      description: "Test",
+      createdAt: 1000,
+      leadSessionId: "lead-session",
+      members: [
+        { agentId: "team-lead@my-team", name: "team-lead", sessionId: "lead-session", cwd: "/proj" },
+      ],
+    }];
+
+    const summary = buildSummary([]);
+    enrichTeamSessions(teams, summary);
+
+    // Lead should keep original sessionId
+    assert.equal(teams[0].members[0].sessionId, "lead-session");
   });
 });
 
