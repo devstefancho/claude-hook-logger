@@ -3,6 +3,7 @@ node_modules/
 *.log
 *.png
 !web/public/logo.png
+!build/icon.png
 tmp/
 dist/
 release/
