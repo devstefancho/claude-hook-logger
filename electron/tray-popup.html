@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Pulse Tray</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-base: #0a0e14;
+    --bg-surface: #12161e;
+    --bg-elevated: #1a1f2b;
+    --text-primary: #d4dae4;
+    --text-secondary: #6b7385;
+    --text-muted: #3d4554;
+    --accent: #00d4ff;
+    --accent-dim: #00d4ff22;
+    --border: #252b37;
+    --border-hover: #3d4554;
+    --status-active: #3fb950;
+    --status-idle: #d29922;
+    --status-waiting: #f0883e;
+  }
+
+  html, body {
+    background: transparent;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    color: var(--text-primary);
+    -webkit-app-region: no-drag;
+    user-select: none;
+  }
+
+  .container {
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+
+  .header-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .header-pulse svg {
+    width: 20px;
+    height: 10px;
+  }
+
+  .header-pulse polyline {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .header-close {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.12s;
+  }
+
+  .header-close:hover {
+    color: var(--text-primary);
+  }
+
+  .section-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 6px 12px 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .section-label.waiting { color: var(--status-waiting); }
+  .section-label.active { color: var(--status-active); }
+  .section-label.idle { color: var(--status-idle); }
+
+  .badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 0 4px;
+    border-radius: 2px;
+  }
+
+  .badge.waiting { background: #f0883e22; color: var(--status-waiting); }
+  .badge.active { background: #3fb95022; color: var(--status-active); }
+  .badge.idle { background: #d2992222; color: var(--status-idle); }
+
+  .card-list {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 0 8px 4px;
+  }
+
+  .card-list::-webkit-scrollbar { width: 3px; }
+  .card-list::-webkit-scrollbar-track { background: transparent; }
+  .card-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--border);
+    padding: 6px 8px;
+    margin-bottom: 3px;
+    cursor: pointer;
+    transition: all 0.12s;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .card:hover {
+    background: var(--bg-elevated);
+    border-color: var(--border-hover);
+  }
+
+  .card.waiting { border-left-color: var(--status-waiting); }
+  .card.waiting:hover { border-color: var(--status-waiting); }
+  .card.active { border-left-color: var(--status-active); }
+  .card.idle { border-left-color: var(--status-idle); }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+
+  .status-dot.waiting { background: var(--status-waiting); }
+  .status-dot.active { background: var(--status-active); }
+  .status-dot.idle { background: var(--status-idle); }
+
+  .card-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .card-project {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-detail {
+    font-size: 9px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+  }
+
+  .card-detail.permission {
+    color: var(--status-waiting);
+  }
+
+  .actions {
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+
+  .btn {
+    flex: 1;
+    padding: 5px 0;
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-align: center;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+
+  .btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+  }
+
+  .btn.primary:hover {
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  .btn.danger:hover {
+    color: #ff4444;
+    border-color: #ff4444;
+  }
+
+  .empty {
+    padding: 12px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <span class="header-title">Claude Pulse</span>
+      <div class="header-actions">
+        <span class="header-pulse">
+          <svg viewBox="0 0 20 10">
+            <polyline points="0,5 3,5 6,1 9,9 12,3 15,7 17,5 20,5"/>
+          </svg>
+        </span>
+        <button type="button" class="header-close" id="btn-close" aria-label="Close tray popup">X</button>
+      </div>
+    </div>
+
+    <div id="content">
+      <div class="empty">Connecting...</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="btn-dashboard">Dashboard</button>
+      <button class="btn danger" id="btn-quit">Quit</button>
+    </div>
+  </div>
+
+  <script>
+    const content = document.getElementById('content');
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '';
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'now';
+      if (mins < 60) return mins + 'm ago';
+      const hrs = Math.floor(mins / 60);
+      return hrs + 'h ago';
+    }
+
+    function projectLabel(agent) {
+      const name = agent.projectName || agent.sessionName || agent.sessionId?.slice(0, 8) || '?';
+      return name.replace(/^~\/works\//, '');
+    }
+
+    function renderSection(status, agents, label) {
+      if (agents.length === 0) return '';
+      let html = '<div class="section-label ' + status + '">';
+      html += label + ' <span class="badge ' + status + '">' + agents.length + '</span>';
+      html += '</div>';
+      html += '<div class="card-list">';
+      for (const agent of agents) {
+        const project = escapeHtml(projectLabel(agent));
+        html += '<div class="card ' + status + '" data-id="' + (agent.sessionId || '') + '">';
+        html += '<div class="status-dot ' + status + '"></div>';
+        html += '<div class="card-content">';
+        html += '<div class="card-project">' + project + '</div>';
+        if (status === 'waiting' && agent.permissionMessage) {
+          html += '<div class="card-detail permission">' + escapeHtml(agent.permissionMessage) + '</div>';
+        } else {
+          const detail = agent.lastToolName
+            ? agent.lastToolName + ' · ' + timeAgo(agent.lastActivity)
+            : timeAgo(agent.lastActivity);
+          html += '<div class="card-detail">' + escapeHtml(detail) + '</div>';
+        }
+        html += '</div></div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function render(agents) {
+      const waiting = agents.filter(a => a.status === 'waiting');
+      const active = agents.filter(a => a.status === 'active');
+      const idle = agents.filter(a => a.status === 'idle');
+
+      let html = '';
+
+      if (waiting.length === 0 && active.length === 0 && idle.length === 0) {
+        html = '<div class="empty">No active sessions</div>';
+      } else {
+        html += renderSection('waiting', waiting, 'Waiting');
+        html += renderSection('active', active, 'Active');
+        html += renderSection('idle', idle, 'Idle');
+      }
+
+      content.innerHTML = html;
+
+      // Bind card clicks (waiting cards open tmux)
+      document.querySelectorAll('.card.waiting[data-id]').forEach(card => {
+        card.addEventListener('click', () => {
+          if (window.electronTray) window.electronTray.openTmux(card.getAttribute('data-id'));
+        });
+      });
+
+      // Resize popup to fit content
+      requestAnimationFrame(() => {
+        const h = document.querySelector('.container').offsetHeight;
+        if (window.electronTray) window.electronTray.setHeight(h);
+      });
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    if (window.electronTray) {
+      window.electronTray.onAgentsUpdate((agents) => {
+        render(agents);
+      });
+    }
+
+    document.getElementById('btn-dashboard').addEventListener('click', () => {
+      if (window.electronTray) window.electronTray.openDashboard();
+    });
+
+    document.getElementById('btn-close').addEventListener('click', () => {
+      if (window.electronTray) window.electronTray.hide();
+    });
+
+    document.getElementById('btn-quit').addEventListener('click', () => {
+      if (window.electronTray) window.electronTray.quit();
+    });
+  </script>
+</body>
+</html>

@@ -77,6 +77,18 @@
       {
         "from": "viewer/index.html",
         "to": "viewer/index.html"
+      },
+      {
+        "from": "build/trayIconTemplate.png",
+        "to": "trayIconTemplate.png"
+      },
+      {
+        "from": "build/trayIconTemplate@2x.png",
+        "to": "trayIconTemplate@2x.png"
+      },
+      {
+        "from": "electron/tray-popup.html",
+        "to": "tray-popup.html"
       }
     ],
     "directories": {

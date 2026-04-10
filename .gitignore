@@ -4,6 +4,8 @@ node_modules/
 *.png
 !web/public/logo.png
 !build/icon.png
+!build/trayIconTemplate.png
+!build/trayIconTemplate@2x.png
 tmp/
 dist/
 release/
