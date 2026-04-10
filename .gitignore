@@ -7,3 +7,6 @@ tmp/
 dist/
 release/
 .playwright-cli/
+
+.claude/worktrees/
+plans/
