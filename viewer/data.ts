@@ -822,8 +822,11 @@ export function getTeams(teamsDir: string, sessionsDir?: string): TeamInfo[] {
         if (member.sessionId || !member.joinedAt) continue;
 
         // Find unassigned session candidates with matching cwd, closest mtime to joinedAt
+        // Time window guard: only match sessions whose mtime is within 5 minutes of joinedAt
+        const TEMPORAL_WINDOW_MS = 5 * 60 * 1000;
         const candidates = sessionCandidates
-          .filter((s) => !assignedSessionIds.has(s.sessionId) && member.cwd && s.cwd === member.cwd)
+          .filter((s) => !assignedSessionIds.has(s.sessionId) && member.cwd && s.cwd === member.cwd
+            && Math.abs(s.mtime - member.joinedAt!) < TEMPORAL_WINDOW_MS)
           .sort((a, b) => Math.abs(a.mtime - member.joinedAt!) - Math.abs(b.mtime - member.joinedAt!));
 
         if (candidates.length > 0) {
@@ -847,9 +850,70 @@ export function getTeams(teamsDir: string, sessionsDir?: string): TeamInfo[] {
   return teams;
 }
 
-/** Enrich team members with sessionId by matching hook event sessions (temporal + cwd) */
+/** Enrich team members with sessionId by matching hook event sessions and project JSONL files */
 export function enrichTeamSessions(teams: TeamInfo[], summary: Summary): void {
+  /* c8 ignore next -- HOME always set in test env */
+  const projectsDir = path.join(process.env.HOME || os.homedir(), ".claude", "projects");
+
   for (const team of teams) {
+    // PASS 1: Project JSONL-based direct matching (highest priority)
+    // Project JSONL files contain teamName/agentName, allowing precise matching
+    // even when session files are missing or temporal matching produces stale results
+    /* c8 ignore start -- requires real project JSONL files */
+    for (const member of team.members) {
+      // Skip lead member (already definitively resolved)
+      if (member.sessionId === team.leadSessionId) continue;
+      if (!member.cwd) continue;
+
+      const memberRole = member.agentId.split("@")[0];
+      const mangledCwd = mangleCwd(member.cwd);
+      const projDir = path.join(projectsDir, mangledCwd);
+      if (!fs.existsSync(projDir)) continue;
+
+      let dirEntries: string[];
+      try {
+        dirEntries = fs.readdirSync(projDir).filter(f => f.endsWith(".jsonl"));
+      } catch {
+        continue;
+      }
+
+      // Sort by mtime descending (most recent first) and limit scan
+      const jsonlFiles = dirEntries
+        .map(f => {
+          try {
+            return { name: f, mtime: fs.statSync(path.join(projDir, f)).mtimeMs };
+          /* c8 ignore next */
+          } catch { return null; }
+        })
+        .filter((f): f is { name: string; mtime: number } => f !== null)
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, 20);
+
+      for (const file of jsonlFiles) {
+        const sessionId = file.name.replace(".jsonl", "");
+        const filePath = path.join(projDir, file.name);
+        try {
+          const content = fs.readFileSync(filePath, "utf-8");
+          const lines = content.split("\n").slice(0, 5);
+          let matched = false;
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const entry = JSON.parse(line);
+              if (entry.teamName === team.name && entry.agentName === memberRole) {
+                member.sessionId = sessionId;
+                matched = true;
+                break;
+              }
+            } catch { /* skip unparseable line */ }
+          }
+          if (matched) break;
+        } catch { /* skip unreadable file */ }
+      }
+    }
+    /* c8 ignore stop */
+
+    // PASS 2: Temporal fallback for still-unresolved members (existing logic)
     const assignedSids = new Set(team.members.filter(m => m.sessionId).map(m => m.sessionId!));
     const unresolvedMembers = team.members
       .filter(m => !m.sessionId && m.joinedAt)
