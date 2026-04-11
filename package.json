@@ -38,11 +38,32 @@
   "build": {
     "appId": "com.claude-pulse.app",
     "productName": "Claude Pulse",
+    "icon": "build/icon.png",
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
       "target": [
         "dmg"
+      ],
+      "identity": null,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
       ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development"
     },
     "files": [
       "dist/**/*",
@@ -56,6 +77,18 @@
       {
         "from": "viewer/index.html",
         "to": "viewer/index.html"
+      },
+      {
+        "from": "build/trayIconTemplate.png",
+        "to": "trayIconTemplate.png"
+      },
+      {
+        "from": "build/trayIconTemplate@2x.png",
+        "to": "trayIconTemplate@2x.png"
+      },
+      {
+        "from": "electron/tray-popup.html",
+        "to": "tray-popup.html"
       }
     ],
     "directories": {
