@@ -8,6 +8,7 @@ CLAUDE_DIR="$HOME/.claude"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 VIEWER_DIR="$HOOKS_DIR/log-viewer"
 SETTINGS="$CLAUDE_DIR/settings.json"
+PIDFILE="$HOOKS_DIR/log-viewer.pid"
 
 # Colors
 GREEN='\033[0;32m'
@@ -18,15 +19,42 @@ NC='\033[0m'
 echo "=== Claude Pulse - Uninstall ==="
 echo ""
 
-# Check node is available (needed for settings-merge)
-if ! command -v node &>/dev/null; then
-  echo -e "${RED}Error: Node.js is required for uninstall${NC}"
-  exit 1
+# 1. Stop running server first
+echo "Stopping server..."
+if [[ -f "$HOOKS_DIR/log-viewer.sh" ]]; then
+  "$HOOKS_DIR/log-viewer.sh" --stop 2>/dev/null || true
+elif [[ -f "$PIDFILE" ]]; then
+  pid=$(cat "$PIDFILE")
+  kill "$pid" 2>/dev/null || true
+  rm -f "$PIDFILE"
+fi
+echo ""
+
+# 2. Unload launchd agent (macOS) — before deleting scripts
+if [[ "$(uname)" == "Darwin" ]]; then
+  PLIST="$HOME/Library/LaunchAgents/com.claude-pulse.dashboard.plist"
+  if [[ -f "$PLIST" ]]; then
+    launchctl unload "$PLIST" 2>/dev/null || true
+    rm "$PLIST"
+    echo -e "  ${RED}-${NC} launchd agent removed"
+  fi
 fi
 
-# Remove hooks from settings.json
+# 3. Remove CLI symlink
+for dir in "/usr/local/bin" "/opt/homebrew/bin" "$HOME/.local/bin"; do
+  if [[ -L "$dir/claude-pulse" ]]; then
+    rm "$dir/claude-pulse"
+    echo -e "  ${RED}-${NC} $dir/claude-pulse"
+  fi
+done
+
+# 4. Clean hooks from settings.json (requires Node)
+echo ""
 echo "Cleaning settings.json..."
-if [[ -f "$SETTINGS" ]]; then
+if ! command -v node &>/dev/null; then
+  echo -e "  ${YELLOW}Warning: Node.js not found. settings.json cleanup skipped.${NC}"
+  echo -e "  ${YELLOW}Remove claude-pulse hooks from ~/.claude/settings.json manually.${NC}"
+elif [[ -f "$SETTINGS" ]]; then
   node "$SCRIPT_DIR/dist/lib/settings-merge-cli.js" uninstall \
     --settings "$SETTINGS" \
     --pattern "event-logger\\.sh"
@@ -36,7 +64,7 @@ fi
 
 echo ""
 
-# Remove files
+# 5. Remove files
 echo "Removing files..."
 
 FILES_TO_REMOVE=(
@@ -59,8 +87,10 @@ if [[ -d "$VIEWER_DIR" ]]; then
   echo -e "  ${RED}-${NC} log-viewer/"
 fi
 
+# Remove pidfile
+rm -f "$PIDFILE"
+
 echo ""
 echo -e "${YELLOW}Note: ~/.claude/claude-pulse/ preserved (your log data)${NC}"
-echo -e "${YELLOW}Note: If you added the 'hooklog' alias, remove it manually from your shell config.${NC}"
 echo ""
 echo -e "${GREEN}=== Uninstall complete ===${NC}"
