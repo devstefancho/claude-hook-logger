@@ -87,12 +87,97 @@ node "$SCRIPT_DIR/dist/lib/settings-merge-cli.js" install \
 
 echo ""
 
+# CLI symlink
+CLI_NAME="claude-pulse"
+CLI_TARGET="$HOOKS_DIR/log-viewer.sh"
+CLI_BIN_DIR=""
+
+echo "Setting up CLI..."
+if [[ -d /usr/local/bin ]] && [[ -w /usr/local/bin ]]; then
+  CLI_BIN_DIR="/usr/local/bin"
+elif [[ -d /opt/homebrew/bin ]] && [[ -w /opt/homebrew/bin ]]; then
+  CLI_BIN_DIR="/opt/homebrew/bin"
+elif mkdir -p "$HOME/.local/bin" 2>/dev/null; then
+  CLI_BIN_DIR="$HOME/.local/bin"
+  if [[ ":$PATH:" != *":$CLI_BIN_DIR:"* ]]; then
+    echo -e "  ${YELLOW}Note: Add ~/.local/bin to your PATH:${NC}"
+    echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+  fi
+fi
+
+if [[ -n "$CLI_BIN_DIR" ]]; then
+  LINK_PATH="$CLI_BIN_DIR/$CLI_NAME"
+  # Safety: skip if target is a regular file or directory (not our symlink)
+  if [[ -e "$LINK_PATH" ]] && [[ ! -L "$LINK_PATH" ]]; then
+    echo -e "  ${YELLOW}Warning: $LINK_PATH already exists (not a symlink), skipping${NC}"
+  else
+    ln -sf "$CLI_TARGET" "$LINK_PATH"
+    echo -e "  ${GREEN}+${NC} $LINK_PATH"
+  fi
+else
+  echo -e "  ${YELLOW}Warning: No writable bin directory found. Use full path:${NC}"
+  echo "    $CLI_TARGET --open"
+fi
+
+echo ""
+
+# launchd auto-start (macOS only)
+if [[ "$(uname)" == "Darwin" ]]; then
+  PLIST_DIR="$HOME/Library/LaunchAgents"
+  PLIST_FILE="$PLIST_DIR/com.claude-pulse.dashboard.plist"
+
+  # Resolve Node.js path for launchd environment
+  NODE_PATH="$(command -v node)"
+  NODE_BIN_DIR="$(dirname "$NODE_PATH")"
+
+  echo -n "Enable auto-start on login? (y/N) "
+  read -r AUTOSTART
+  if [[ "$AUTOSTART" =~ ^[Yy]$ ]]; then
+    mkdir -p "$PLIST_DIR"
+    cat > "$PLIST_FILE" << PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.claude-pulse.dashboard</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${HOOKS_DIR}/log-viewer.sh</string>
+    <string>--fg</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${NODE_BIN_DIR}:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>${LOGS_DIR}/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>${LOGS_DIR}/launchd-error.log</string>
+</dict>
+</plist>
+PLIST
+    if launchctl load "$PLIST_FILE"; then
+      echo -e "  ${GREEN}+${NC} Auto-start enabled (launchd)"
+    else
+      echo -e "  ${YELLOW}Warning: launchctl load failed. Plist saved but not loaded.${NC}"
+    fi
+  else
+    echo -e "  Skipped. Run 'claude-pulse --open' manually after reboot."
+  fi
+fi
+
+echo ""
 echo -e "${GREEN}=== Installation complete ===${NC}"
 echo ""
 echo "Usage:"
-echo "  View dashboard:  ~/.claude/hooks/log-viewer.sh --open"
-echo "  Analyze logs:    ~/.claude/hooks/analyze-interrupts.sh"
-echo "  Uninstall:       $SCRIPT_DIR/uninstall.sh"
-echo ""
-echo "(Optional) Add alias for quick access:"
-echo "  echo 'alias hooklog=\"\$HOME/.claude/hooks/log-viewer.sh\"' >> ~/.zshrc && source ~/.zshrc"
+echo "  claude-pulse --open       Start dashboard + open browser"
+echo "  claude-pulse --status     Check server status"
+echo "  claude-pulse --stop       Stop server"
+echo "  Uninstall:                $SCRIPT_DIR/uninstall.sh"
